@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  ClientsView,
+  SettingsView,
+  type ClientRecord,
+  type CompanySettings,
+} from "./management-panels";
 
 type OfferItem = {
   id: number;
@@ -45,6 +51,28 @@ type SavedOffer = {
 
 const OFFERS_KEY = "electro-oferte:offers:v1";
 const DRAFT_KEY = "electro-oferte:draft:v1";
+const CLIENTS_KEY = "electro-oferte:clients:v1";
+const SETTINGS_KEY = "electro-oferte:settings:v1";
+
+const initialClients: ClientRecord[] = [
+  { id: "client-modern", type: "firmă", name: "Modern Construct Service", taxId: "", address: "Piatra Neamț", contactPerson: "", phone: "", email: "" },
+  { id: "client-drmax", type: "firmă", name: "Dr. Max Mediaș", taxId: "", address: "Mediaș", contactPerson: "", phone: "", email: "" },
+  { id: "client-apel", type: "firmă", name: "Apel Industries", taxId: "", address: "", contactPerson: "", phone: "", email: "" },
+  { id: "client-buzatu", type: "firmă", name: "Centru Medical Buzatu", taxId: "", address: "", contactPerson: "", phone: "", email: "" },
+];
+
+const initialCompanySettings: CompanySettings = {
+  name: "ElectricSmart.Co S.R.L.",
+  taxId: "47684690",
+  registrationNumber: "J02/287/2023",
+  address: "România, Arad, Socodor, nr. 77",
+  phone: "0751 970 357",
+  email: "info@frizeo.ro",
+  iban: "",
+  bank: "",
+  defaultWarranty: 24,
+  defaultValidity: 30,
+};
 
 const initialItems: OfferItem[] = [
   { id: 1, name: "Cablu N2XH 3x2,5", unit: "m", quantity: 150, unitPrice: 6.75, vatRate: 21 },
@@ -75,7 +103,7 @@ function nextOfferNumber(offers: SavedOffer[]) {
 }
 
 export default function Home() {
-  const [view, setView] = useState<"editor" | "offers">("editor");
+  const [view, setView] = useState<"editor" | "offers" | "clients" | "settings">("editor");
   const [items, setItems] = useState(initialItems);
   const [client, setClient] = useState("Modern Construct Service");
   const [title, setTitle] = useState("Instalație electrică locuință");
@@ -95,11 +123,15 @@ export default function Home() {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogCategory, setCatalogCategory] = useState("Toate");
+  const [clients, setClients] = useState<ClientRecord[]>(initialClients);
+  const [companySettings, setCompanySettings] = useState<CompanySettings>(initialCompanySettings);
 
   useEffect(() => {
     try {
       const storedOffers = JSON.parse(localStorage.getItem(OFFERS_KEY) ?? "[]") as SavedOffer[];
       setSavedOffers(storedOffers);
+      setClients(JSON.parse(localStorage.getItem(CLIENTS_KEY) ?? JSON.stringify(initialClients)));
+      setCompanySettings(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? JSON.stringify(initialCompanySettings)));
       setCurrentNumber(nextOfferNumber(storedOffers));
       const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null") as Partial<SavedOffer> | null;
       if (draft) {
@@ -126,6 +158,16 @@ export default function Home() {
     // Valorile inițiale sunt intenționat citite o singură dată.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
+  }, [hydrated, clients]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(companySettings));
+  }, [hydrated, companySettings]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -224,14 +266,21 @@ export default function Home() {
     setClient("");
     setTitle("");
     setIssueDate(today());
-    setValidityDays("30");
+    setValidityDays(String(companySettings.defaultValidity));
     setCurrency("RON");
     setItems([]);
     setLabor(0);
     setDiscount(0);
-    setNotes("Garanție: 24 luni\nValabilitate: 30 zile de la data întocmirii");
+    setNotes(`Garanție: ${companySettings.defaultWarranty} luni\nValabilitate: ${companySettings.defaultValidity} zile de la data întocmirii`);
     localStorage.removeItem(DRAFT_KEY);
     setView("editor");
+  }
+
+  function newOfferForClient(clientName: string) {
+    newOffer();
+    setClient(clientName);
+    setValidityDays(String(companySettings.defaultValidity));
+    setNotes(`Garanție: ${companySettings.defaultWarranty} luni\nValabilitate: ${companySettings.defaultValidity} zile de la data întocmirii`);
   }
 
   function openOffer(offer: SavedOffer) {
@@ -271,9 +320,9 @@ export default function Home() {
         <nav aria-label="Navigare principală">
           <button><Icon>⌂</Icon>Panou principal</button>
           <button className={view === "offers" ? "active" : ""} onClick={() => setView("offers")}><Icon>▤</Icon>Oferte <span className="count">{savedOffers.length}</span></button>
-          <button><Icon>♙</Icon>Clienți</button>
+          <button className={view === "clients" ? "active" : ""} onClick={() => setView("clients")}><Icon>♙</Icon>Clienți <span className="count">{clients.length}</span></button>
           <button onClick={() => setCatalogOpen(true)}><Icon>◇</Icon>Catalog <span className="count">{catalog.length}</span></button>
-          <button><Icon>⚙</Icon>Setări firmă</button>
+          <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><Icon>⚙</Icon>Setări firmă</button>
         </nav>
         <div className="company-card">
           <span className="company-avatar">ES</span>
@@ -283,7 +332,11 @@ export default function Home() {
       </aside>
 
       <section className="workspace">
-        {view === "offers" ? (
+        {view === "clients" ? (
+          <ClientsView clients={clients} onChange={setClients} onCreateOffer={newOfferForClient} />
+        ) : view === "settings" ? (
+          <SettingsView settings={companySettings} onChange={setCompanySettings} />
+        ) : view === "offers" ? (
           <>
             <header className="topbar">
               <div><span className="eyebrow">ELECTRICSMART</span><h1>Oferte</h1><p>{savedOffers.length} salvate pe acest dispozitiv</p></div>
@@ -331,7 +384,10 @@ export default function Home() {
                 <section className="card details-card">
                   <div className="section-heading"><span className="step">1</span><div><h2>Detalii ofertă</h2><p>Informațiile de bază ale lucrării</p></div></div>
                   <div className="form-grid">
-                    <label>Beneficiar<input value={client} onChange={(event) => setClient(event.target.value)} /></label>
+                    <label>Beneficiar
+                      <input list="client-options" value={client} onChange={(event) => setClient(event.target.value)} />
+                      <datalist id="client-options">{clients.map((entry) => <option key={entry.id} value={entry.name} />)}</datalist>
+                    </label>
                     <label>Data emiterii<input type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} /></label>
                     <label className="wide">Titlul lucrării<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
                     <label>Valabilitate<select value={validityDays} onChange={(event) => setValidityDays(event.target.value)}><option value="15">15 zile</option><option value="30">30 zile</option><option value="60">60 zile</option></select></label>
@@ -400,7 +456,7 @@ export default function Home() {
                   <div className="segmented"><button className={previewMode === "detaliat" ? "selected" : ""} onClick={() => setPreviewMode("detaliat")}>Detaliat</button><button className={previewMode === "simplificat" ? "selected" : ""} onClick={() => setPreviewMode("simplificat")}>Simplificat</button></div>
                 </div>
                 <article className="paper">
-                  <div className="paper-header"><div><strong>ELECTRICSMART.CO S.R.L.</strong><span>CUI 47684690 · J02/287/2023</span><span>Socodor nr. 77, Arad</span><span>Tel. 0751 970 357</span></div><div className="paper-logo">ES</div></div>
+                  <div className="paper-header"><div><strong>{companySettings.name.toUpperCase()}</strong><span>CUI {companySettings.taxId} · {companySettings.registrationNumber}</span><span>{companySettings.address}</span><span>Tel. {companySettings.phone}{companySettings.email ? ` · ${companySettings.email}` : ""}</span>{companySettings.iban && <span>IBAN {companySettings.iban}{companySettings.bank ? ` · ${companySettings.bank}` : ""}</span>}</div><div className="paper-logo">ES</div></div>
                   <div className="paper-title"><small>{currentNumber} · {issueDate.split("-").reverse().join(".")}</small><h3>{title || "Titlul lucrării"}</h3><p>Beneficiar: <strong>{client || "Beneficiar"}</strong></p></div>
                   <table className="paper-table">
                     <thead><tr><th>#</th><th>Descriere</th><th>UM</th><th>Cant.</th>{previewMode === "detaliat" && <><th>Preț</th><th>Total</th></>}</tr></thead>
