@@ -11,6 +11,7 @@ import {
 type OfferItem = {
   id: number;
   catalogId?: string;
+  kind: "material" | "labor" | "expense";
   name: string;
   unit: string;
   quantity: number;
@@ -53,6 +54,7 @@ const OFFERS_KEY = "electro-oferte:offers:v1";
 const DRAFT_KEY = "electro-oferte:draft:v1";
 const CLIENTS_KEY = "electro-oferte:clients:v1";
 const SETTINGS_KEY = "electro-oferte:settings:v1";
+const CUSTOM_CATALOG_KEY = "electro-oferte:custom-catalog:v1";
 
 const initialClients: ClientRecord[] = [
   { id: "client-modern", type: "firmă", name: "Modern Construct Service", taxId: "", address: "Piatra Neamț", contactPerson: "", phone: "", email: "" },
@@ -75,9 +77,9 @@ const initialCompanySettings: CompanySettings = {
 };
 
 const initialItems: OfferItem[] = [
-  { id: 1, name: "Cablu N2XH 3x2,5", unit: "m", quantity: 150, unitPrice: 6.75, vatRate: 21 },
-  { id: 2, name: "Tablou Hager Volta 36M", unit: "buc", quantity: 1, unitPrice: 381, vatRate: 21 },
-  { id: 3, name: "Material mărunt", unit: "buc", quantity: 1, unitPrice: 500, vatRate: 21 },
+  { id: 1, kind: "material", name: "Cablu N2XH 3x2,5", unit: "m", quantity: 150, unitPrice: 6.75, vatRate: 21 },
+  { id: 2, kind: "material", name: "Tablou Hager Volta 36M", unit: "buc", quantity: 1, unitPrice: 381, vatRate: 21 },
+  { id: 3, kind: "material", name: "Material mărunt", unit: "buc", quantity: 1, unitPrice: 500, vatRate: 21 },
 ];
 
 const money = new Intl.NumberFormat("ro-RO", {
@@ -102,6 +104,36 @@ function nextOfferNumber(offers: SavedOffer[]) {
   return `OF-${year}-${String(max + 1).padStart(3, "0")}`;
 }
 
+function normalizeName(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("ro").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function calculateOfferTotals(items: OfferItem[], discount: number, labor: number) {
+  const materialsSubtotal = items
+    .filter((item) => (item.kind ?? "material") !== "labor")
+    .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const servicesSubtotal = items
+    .filter((item) => item.kind === "labor")
+    .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const discountAmount = materialsSubtotal * (discount / 100);
+  const materialVat = items
+    .filter((item) => (item.kind ?? "material") !== "labor")
+    .reduce((sum, item) => sum + item.quantity * item.unitPrice * (item.vatRate / 100), 0) * (1 - discount / 100);
+  const serviceVat = items
+    .filter((item) => item.kind === "labor")
+    .reduce((sum, item) => sum + item.quantity * item.unitPrice * (item.vatRate / 100), 0);
+  const vat = materialVat + serviceVat;
+  return {
+    subtotal: materialsSubtotal,
+    servicesSubtotal,
+    discountAmount,
+    vat,
+    materials: materialsSubtotal - discountAmount + materialVat,
+    services: servicesSubtotal + serviceVat,
+    grand: materialsSubtotal - discountAmount + servicesSubtotal + vat + labor,
+  };
+}
+
 export default function Home() {
   const [view, setView] = useState<"editor" | "offers" | "clients" | "settings">("editor");
   const [items, setItems] = useState(initialItems);
@@ -119,7 +151,8 @@ export default function Home() {
   const [currentNumber, setCurrentNumber] = useState("OF-2026-013");
   const [saveMessage, setSaveMessage] = useState("Ciornă locală");
   const [hydrated, setHydrated] = useState(false);
-  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [baseCatalog, setBaseCatalog] = useState<CatalogItem[]>([]);
+  const [customCatalog, setCustomCatalog] = useState<CatalogItem[]>([]);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogCategory, setCatalogCategory] = useState("Toate");
@@ -132,6 +165,7 @@ export default function Home() {
       setSavedOffers(storedOffers);
       setClients(JSON.parse(localStorage.getItem(CLIENTS_KEY) ?? JSON.stringify(initialClients)));
       setCompanySettings(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? JSON.stringify(initialCompanySettings)));
+      setCustomCatalog(JSON.parse(localStorage.getItem(CUSTOM_CATALOG_KEY) ?? "[]"));
       setCurrentNumber(nextOfferNumber(storedOffers));
       const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null") as Partial<SavedOffer> | null;
       if (draft) {
@@ -152,8 +186,8 @@ export default function Home() {
     }
     fetch("/catalog.json")
       .then((response) => response.json())
-      .then((data: CatalogItem[]) => setCatalog(data))
-      .catch(() => setCatalog([]));
+      .then((data: CatalogItem[]) => setBaseCatalog(data))
+      .catch(() => setBaseCatalog([]));
     setHydrated(true);
     // Valorile inițiale sunt intenționat citite o singură dată.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,6 +205,11 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
+    localStorage.setItem(CUSTOM_CATALOG_KEY, JSON.stringify(customCatalog));
+  }, [hydrated, customCatalog]);
+
+  useEffect(() => {
+    if (!hydrated) return;
     const draft: Partial<SavedOffer> = {
       id: currentOfferId ?? undefined,
       number: currentNumber,
@@ -182,26 +221,17 @@ export default function Home() {
     setSaveMessage("Ciornă salvată automat pe acest dispozitiv");
   }, [hydrated, currentOfferId, currentNumber, client, title, issueDate, validityDays, currency, items, labor, discount, notes]);
 
-  const totals = useMemo(() => {
-    const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    const discountAmount = subtotal * (discount / 100);
-    const taxable = subtotal - discountAmount;
-    const vat = items.reduce(
-      (sum, item) => sum + item.quantity * item.unitPrice * (item.vatRate / 100),
-      0,
-    ) * (1 - discount / 100);
-    return { subtotal, discountAmount, vat, materials: taxable + vat, grand: taxable + vat + labor };
-  }, [items, discount, labor]);
+  const catalog = useMemo(() => [...customCatalog, ...baseCatalog], [customCatalog, baseCatalog]);
+  const totals = useMemo(() => calculateOfferTotals(items, discount, labor), [items, discount, labor]);
 
   const categories = useMemo(
-    () => ["Toate", ...Array.from(new Set(catalog.filter((item) => item.kind === "material").map((item) => item.category))).sort()],
+    () => ["Toate", ...Array.from(new Set(catalog.map((item) => item.category))).sort()],
     [catalog],
   );
 
   const filteredCatalog = useMemo(() => {
     const query = catalogQuery.trim().toLocaleLowerCase("ro");
     return catalog
-      .filter((item) => item.kind === "material")
       .filter((item) => catalogCategory === "Toate" || item.category === catalogCategory)
       .filter((item) => !query || `${item.code} ${item.name} ${item.category} ${item.specifications}`.toLocaleLowerCase("ro").includes(query))
       .slice(0, 80);
@@ -211,7 +241,7 @@ export default function Home() {
     setItems((current) =>
       current.map((item) =>
         item.id === id
-          ? { ...item, [field]: field === "name" || field === "unit" ? value : Number(value) }
+          ? { ...item, [field]: field === "name" || field === "unit" || field === "kind" ? value : Number(value) }
           : item,
       ),
     );
@@ -219,7 +249,7 @@ export default function Home() {
 
   function addBlankItem() {
     const id = Math.max(0, ...items.map((item) => item.id)) + 1;
-    setItems([...items, { id, name: "Articol nou", unit: "buc", quantity: 1, unitPrice: 0, vatRate: 21 }]);
+    setItems([...items, { id, kind: "material", name: "Articol nou", unit: "buc", quantity: 1, unitPrice: 0, vatRate: 21 }]);
   }
 
   function addCatalogItem(item: CatalogItem) {
@@ -227,6 +257,7 @@ export default function Home() {
     setItems([...items, {
       id,
       catalogId: item.id,
+      kind: item.kind,
       name: item.name,
       unit: item.unit,
       quantity: 1,
@@ -257,7 +288,46 @@ export default function Home() {
     setCurrentNumber(number);
     localStorage.setItem(OFFERS_KEY, JSON.stringify(next));
     localStorage.setItem(DRAFT_KEY, JSON.stringify(offer));
-    setSaveMessage(`Salvat local la ${new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" })}`);
+
+    let clientAdded = false;
+    const clientName = client.trim();
+    if (clientName && !clients.some((entry) => normalizeName(entry.name) === normalizeName(clientName))) {
+      const nextClients = [{ id: crypto.randomUUID(), type: "firmă" as const, name: clientName, taxId: "", address: "", contactPerson: "", phone: "", email: "" }, ...clients];
+      setClients(nextClients);
+      localStorage.setItem(CLIENTS_KEY, JSON.stringify(nextClients));
+      clientAdded = true;
+    }
+
+    const knownItems = new Set(catalog.map((entry) => `${entry.kind}:${normalizeName(entry.name)}:${entry.unit}`));
+    const newCatalogItems: CatalogItem[] = [];
+    items.forEach((item) => {
+      const itemName = item.name.trim();
+      const kind = item.kind ?? "material";
+      const identity = `${kind}:${normalizeName(itemName)}:${item.unit}`;
+      if (!itemName || knownItems.has(identity)) return;
+      knownItems.add(identity);
+      newCatalogItems.push({
+        id: `CUS-${crypto.randomUUID()}`,
+        code: "",
+        name: itemName,
+        category: kind === "labor" ? "Servicii și manoperă" : kind === "expense" ? "Costuri auxiliare" : "Materiale personalizate",
+        subcategory: "Adăugat din ofertă",
+        kind,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        currency,
+        vatRate: item.vatRate,
+        specifications: "",
+        sourceType: "adăugat manual",
+      });
+    });
+    if (newCatalogItems.length) {
+      const nextCatalog = [...newCatalogItems, ...customCatalog];
+      setCustomCatalog(nextCatalog);
+      localStorage.setItem(CUSTOM_CATALOG_KEY, JSON.stringify(nextCatalog));
+    }
+    const additions = [clientAdded ? "client nou" : "", newCatalogItems.length ? `${newCatalogItems.length} articole în catalog` : ""].filter(Boolean);
+    setSaveMessage(`Salvat local la ${new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" })}${additions.length ? ` · adăugat: ${additions.join(", ")}` : ""}`);
   }
 
   function newOffer() {
@@ -350,7 +420,7 @@ export default function Home() {
                 <div className="offers-table card">
                   <div className="offers-table-head"><span>Număr</span><span>Beneficiar și lucrare</span><span>Actualizată</span><span>Status</span><span></span></div>
                   {savedOffers.map((offer) => {
-                    const offerTotal = offer.items.reduce((sum, item) => sum + item.quantity * item.unitPrice * (1 + item.vatRate / 100), 0) * (1 - offer.discount / 100) + offer.labor;
+                    const offerTotal = calculateOfferTotals(offer.items, offer.discount, offer.labor).grand;
                     return (
                       <div className="offer-row" key={offer.id}>
                         <button className="offer-number" onClick={() => openOffer(offer)}>{offer.number}</button>
@@ -403,7 +473,7 @@ export default function Home() {
                   </div>
                   <div className="table-scroll">
                     <table>
-                      <thead><tr><th>#</th><th>Articol</th><th>UM</th><th>Cant.</th><th>Preț fără TVA</th><th>TVA</th><th>Total</th><th></th></tr></thead>
+                      <thead><tr><th>#</th><th>Articol</th><th>Tip</th><th>UM</th><th>Cant.</th><th>Preț fără TVA</th><th>TVA</th><th>Total</th><th></th></tr></thead>
                       <tbody>
                         {items.map((item, index) => {
                           const lineSubtotal = item.quantity * item.unitPrice;
@@ -412,6 +482,7 @@ export default function Home() {
                             <tr key={item.id}>
                               <td className="row-number">{index + 1}</td>
                               <td><input aria-label={`Denumire poziția ${index + 1}`} value={item.name} onChange={(event) => updateItem(item.id, "name", event.target.value)} /></td>
+                              <td><select aria-label={`Tip poziția ${index + 1}`} value={item.kind ?? "material"} onChange={(event) => updateItem(item.id, "kind", event.target.value)}><option value="material">Material</option><option value="labor">Serviciu</option><option value="expense">Cost auxiliar</option></select></td>
                               <td><select aria-label={`Unitate poziția ${index + 1}`} value={item.unit} onChange={(event) => updateItem(item.id, "unit", event.target.value)}><option value="buc">buc</option><option value="m">m</option><option value="set">set</option><option value="lucrare">lucrare</option><option value="zi">zi</option></select></td>
                               <td><input aria-label={`Cantitate poziția ${index + 1}`} type="number" min="0" step="0.01" value={item.quantity} onChange={(event) => updateItem(item.id, "quantity", event.target.value)} /></td>
                               <td><div className="money-input"><input aria-label={`Preț poziția ${index + 1}`} type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => updateItem(item.id, "unitPrice", event.target.value)} /><span>{currency === "RON" ? "lei" : "€"}</span></div></td>
@@ -421,7 +492,7 @@ export default function Home() {
                             </tr>
                           );
                         })}
-                        {items.length === 0 && <tr><td colSpan={8}><button className="empty-items" onClick={() => setCatalogOpen(true)}>Alege primul material din catalog</button></td></tr>}
+                        {items.length === 0 && <tr><td colSpan={9}><button className="empty-items" onClick={() => setCatalogOpen(true)}>Alege primul material sau serviciu din catalog</button></td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -437,9 +508,10 @@ export default function Home() {
                   </div>
                   <div className="card totals-card">
                     <div><span>Materiale fără TVA</span><strong>{money.format(totals.subtotal)} {currency === "RON" ? "lei" : "€"}</strong></div>
+                    {totals.servicesSubtotal > 0 && <div><span>Servicii din poziții</span><strong>{money.format(totals.servicesSubtotal)} {currency === "RON" ? "lei" : "€"}</strong></div>}
                     {discount > 0 && <div className="discount"><span>Discount ({discount}%)</span><strong>-{money.format(totals.discountAmount)} {currency === "RON" ? "lei" : "€"}</strong></div>}
-                    <div><span>TVA materiale</span><strong>{money.format(totals.vat)} {currency === "RON" ? "lei" : "€"}</strong></div>
-                    <div><span>Manoperă</span><strong>{money.format(labor)} {currency === "RON" ? "lei" : "€"}</strong></div>
+                    <div><span>TVA total</span><strong>{money.format(totals.vat)} {currency === "RON" ? "lei" : "€"}</strong></div>
+                    <div><span>Manoperă globală</span><strong>{money.format(labor)} {currency === "RON" ? "lei" : "€"}</strong></div>
                     <div className="grand-total"><span>Total general</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "€"}</strong></div>
                   </div>
                 </section>
@@ -462,7 +534,7 @@ export default function Home() {
                     <thead><tr><th>#</th><th>Descriere</th><th>UM</th><th>Cant.</th>{previewMode === "detaliat" && <><th>Preț</th><th>Total</th></>}</tr></thead>
                     <tbody>{items.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.name}</td><td>{item.unit}</td><td>{item.quantity}</td>{previewMode === "detaliat" && <><td>{money.format(item.unitPrice)}</td><td>{money.format(item.quantity * item.unitPrice * (1 + item.vatRate / 100))}</td></>}</tr>)}</tbody>
                   </table>
-                  <div className="paper-summary"><p><span>Materiale cu TVA</span><strong>{money.format(totals.materials)} {currency === "RON" ? "lei" : "EUR"}</strong></p><p><span>Manoperă</span><strong>{money.format(labor)} {currency === "RON" ? "lei" : "EUR"}</strong></p><p><span>TOTAL GENERAL</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "EUR"}</strong></p></div>
+                  <div className="paper-summary"><p><span>Materiale cu TVA</span><strong>{money.format(totals.materials)} {currency === "RON" ? "lei" : "EUR"}</strong></p>{totals.services > 0 && <p><span>Servicii cu TVA</span><strong>{money.format(totals.services)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}<p><span>Manoperă globală</span><strong>{money.format(labor)} {currency === "RON" ? "lei" : "EUR"}</strong></p><p><span>TOTAL GENERAL</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "EUR"}</strong></p></div>
                   <div className="paper-notes"><strong>Condiții</strong>{notes.split("\n").filter(Boolean).map((line) => <p key={line}>{line}</p>)}</div>
                 </article>
               </aside>
@@ -473,8 +545,8 @@ export default function Home() {
 
       {catalogOpen && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setCatalogOpen(false)}>
-          <section className="catalog-modal" role="dialog" aria-modal="true" aria-label="Catalog materiale">
-            <header><div><span className="eyebrow">CATALOG LOCAL</span><h2>Alege un material</h2><p>{catalog.length} articole pregătite pentru import</p></div><button className="modal-close" onClick={() => setCatalogOpen(false)} aria-label="Închide">×</button></header>
+          <section className="catalog-modal" role="dialog" aria-modal="true" aria-label="Catalog materiale și servicii">
+            <header><div><span className="eyebrow">CATALOG LOCAL</span><h2>Alege un material sau serviciu</h2><p>{catalog.length} articole disponibile</p></div><button className="modal-close" onClick={() => setCatalogOpen(false)} aria-label="Închide">×</button></header>
             <div className="catalog-filters">
               <input autoFocus placeholder="Caută după denumire, cod sau specificație…" value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} />
               <select value={catalogCategory} onChange={(event) => setCatalogCategory(event.target.value)}>{categories.map((category) => <option key={category}>{category}</option>)}</select>
@@ -484,7 +556,7 @@ export default function Home() {
                 <button className="catalog-result" key={item.id} onClick={() => addCatalogItem(item)}>
                   <span className="catalog-result-icon">◇</span>
                   <span><strong>{item.name}</strong><small>{item.code ? `${item.code} · ` : ""}{item.category} · {item.unit}{item.specifications ? ` · ${item.specifications}` : ""}</small></span>
-                  <span className="source-chip">{item.sourceType === "ofertă istorică" ? "Folosit anterior" : "Standard"}</span>
+                  <span className="source-chip">{item.sourceType === "adăugat manual" ? "Adăugat de tine" : item.kind === "labor" ? "Serviciu" : item.sourceType === "ofertă istorică" ? "Folosit anterior" : "Standard"}</span>
                   <span className="catalog-add">＋</span>
                 </button>
               ))}
