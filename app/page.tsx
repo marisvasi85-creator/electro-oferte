@@ -78,7 +78,7 @@ const initialCompanySettings: CompanySettings = {
   registrationNumber: "J02/287/2023",
   address: "România, Arad, Socodor, nr. 77",
   phone: "0751 970 357",
-  email: "info@frizeo.ro",
+  email: "teomaris27@gmail.com",
   iban: "",
   bank: "",
   defaultWarranty: 24,
