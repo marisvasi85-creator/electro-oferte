@@ -359,3 +359,26 @@ table { border-collapse: collapse; width: 100%; }
 .auth-card form .primary:disabled { opacity: .65; cursor: wait; }
 .auth-message { padding: 10px 12px; border-radius: 8px; background: #eef4ff; color: #244f91; font-size: 11px; line-height: 1.45; }
 .auth-switch { width: 100%; margin-top: 17px; border: 0; background: transparent; color: var(--blue); font-size: 11px; font-weight: 700; }
+.password-field { position: relative; display: grid; }
+.password-field input { width: 100%; padding-right: 78px; }
+.password-toggle { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--blue); font-size: 11px; font-weight: 700; padding: 6px 8px; }
+.password-strength { font-size: 11px; line-height: 1.4; margin-top: -6px; }
+.strength-weak { color: #b45309; }
+.strength-medium { color: #1d4ed8; }
+.strength-strong { color: #047857; }
+.auth-legal { display: flex; justify-content: center; gap: 18px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.auth-legal a { color: var(--muted); font-size: 11px; font-weight: 600; text-decoration: none; }
+.auth-legal a:hover { color: var(--blue); }
+.auth-link-button { display: grid; place-items: center; height: 44px; margin-top: 12px; text-decoration: none; }
+.field-hint { display: block; margin-top: 6px; font-size: 10px; line-height: 1.4; color: var(--muted); }
+.field-hint.error { color: #b42318; }
+.legal-page { min-height: 100vh; padding: 32px 20px 48px; background: radial-gradient(circle at top, #eef4ff 0, #f6f7f9 45%, #eceff3 100%); }
+.legal-card { width: min(720px, 100%); margin: 0 auto; padding: 34px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: 0 24px 70px rgba(26, 39, 63, .10); }
+.legal-back { display: inline-block; margin-bottom: 18px; color: var(--blue); font-size: 12px; font-weight: 700; text-decoration: none; }
+.legal-body { margin-top: 18px; color: #334155; font-size: 14px; line-height: 1.7; }
+.legal-body h2 { margin: 22px 0 8px; font-size: 16px; color: #0f172a; }
+.legal-body p, .legal-body ul { margin: 0 0 12px; }
+.legal-body ul { padding-left: 18px; }
+.legal-body a { color: var(--blue); }
+.legal-footer { display: flex; gap: 18px; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }
+.legal-footer a { color: var(--muted); font-size: 12px; font-weight: 600; text-decoration: none; }

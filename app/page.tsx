@@ -29,6 +29,7 @@ import {
   updateRemoteOfferStatus,
   updateRemoteCatalogItem,
 } from "../lib/oferte-data";
+import { taxIdHint } from "../lib/ro-validation";
 
 type OfferItem = {
   id: number;
@@ -109,37 +110,28 @@ const defaultPdfColumns: PdfColumns = { unit: true, quantity: true, unitPriceWit
 
 const DRAFT_KEY = "frizeo-oferte:draft:v2";
 
-const initialClients: ClientRecord[] = [
-  { id: "client-modern", type: "firmă", name: "Modern Construct Service", taxId: "", address: "Piatra Neamț", contactPerson: "", phone: "", email: "" },
-  { id: "client-drmax", type: "firmă", name: "Dr. Max Mediaș", taxId: "", address: "Mediaș", contactPerson: "", phone: "", email: "" },
-  { id: "client-apel", type: "firmă", name: "Apel Industries", taxId: "", address: "", contactPerson: "", phone: "", email: "" },
-  { id: "client-buzatu", type: "firmă", name: "Centru Medical Buzatu", taxId: "", address: "", contactPerson: "", phone: "", email: "" },
-];
+const initialClients: ClientRecord[] = [];
 
 const initialCompanySettings: CompanySettings = {
   id: "",
-  name: "ElectricSmart.Co S.R.L.",
-  taxId: "47684690",
-  registrationNumber: "J02/287/2023",
-  address: "România, Arad, Socodor, nr. 77",
-  phone: "0751 970 357",
-  email: "teomaris27@gmail.com",
+  name: "",
+  taxId: "",
+  registrationNumber: "",
+  address: "",
+  phone: "",
+  email: "",
   iban: "",
   bank: "",
   defaultWarranty: 24,
   defaultValidity: 30,
-  industry: "electrical",
+  industry: "other",
   logoPath: "",
-  logoUrl: "/brand/electric-smart-logo.jpg",
+  logoUrl: "",
   accentColor: "#2563eb",
   offerPrefix: "OF",
 };
 
-const initialItems: OfferItem[] = [
-  { id: 1, kind: "material", name: "Cablu N2XH 3x2,5", unit: "m", quantity: 150, unitPrice: 6.75, vatRate: 21 },
-  { id: 2, kind: "material", name: "Tablou Hager Volta 36M", unit: "buc", quantity: 1, unitPrice: 381, vatRate: 21 },
-  { id: 3, kind: "material", name: "Material mărunt", unit: "buc", quantity: 1, unitPrice: 500, vatRate: 21 },
-];
+const initialItems: OfferItem[] = [];
 
 const money = new Intl.NumberFormat("ro-RO", {
   minimumFractionDigits: 2,
@@ -159,7 +151,7 @@ function nextOfferNumber(offers: SavedOffer[]) {
   const max = offers.reduce((value, offer) => {
     const match = offer.number.match(/OF-\d{4}-(\d+)/);
     return Math.max(value, match ? Number(match[1]) : 0);
-  }, 12);
+  }, 0);
   return `OF-${year}-${String(max + 1).padStart(3, "0")}`;
 }
 
@@ -222,21 +214,21 @@ export default function Home() {
   const [dataReload, setDataReload] = useState(0);
   const [view, setView] = useState<"home" | "editor" | "offers" | "clients" | "catalog" | "settings">("home");
   const [items, setItems] = useState(initialItems);
-  const [client, setClient] = useState("Modern Construct Service");
+  const [client, setClient] = useState("");
   const [clientDetails, setClientDetails] = useState<OfferClientDetails>(emptyClientDetails);
-  const [title, setTitle] = useState("Instalație electrică locuință");
+  const [title, setTitle] = useState("");
   const [issueDate, setIssueDate] = useState(today());
   const [validityDays, setValidityDays] = useState("30");
   const [currency, setCurrency] = useState("RON");
-  const [labor, setLabor] = useState(4200);
+  const [labor, setLabor] = useState(0);
   const [laborOptions, setLaborOptions] = useState<LaborOptions>(defaultLaborOptions);
   const [discount, setDiscount] = useState(0);
-  const [notes, setNotes] = useState("Garanție: 24 luni\nValabilitate: 30 zile de la data întocmirii\nOferta nu include costurile de deplasare și cazare.");
+  const [notes, setNotes] = useState("Garanție: 24 luni\nValabilitate: 30 zile de la data întocmirii");
   const [currentStatus, setCurrentStatus] = useState<OfferStatus>("ciornă");
   const [pdfColumns, setPdfColumns] = useState<PdfColumns>(defaultPdfColumns);
   const [savedOffers, setSavedOffers] = useState<SavedOffer[]>([]);
   const [currentOfferId, setCurrentOfferId] = useState<string | null>(null);
-  const [currentNumber, setCurrentNumber] = useState("OF-2026-013");
+  const [currentNumber, setCurrentNumber] = useState("OF-2026-001");
   const [saveMessage, setSaveMessage] = useState("Ciornă locală");
   const [pdfBusy, setPdfBusy] = useState(false);
   const [excelBusy, setExcelBusy] = useState(false);
@@ -274,7 +266,7 @@ export default function Home() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    loadBetaData(user.id, user.email ?? "marisvasi85@gmail.com")
+    loadBetaData(user.id, user.email ?? "")
       .then((data) => {
         if (cancelled) return;
         if (data.needsOnboarding || !data.company) {
@@ -285,7 +277,7 @@ export default function Home() {
         setNeedsOnboarding(false);
         setSavedOffers(data.offers);
         setClients(data.clients);
-        setCompanySettings({ ...data.company, logoUrl: companyLogoUrl(data.company.logoPath) || (data.company.industry === "electrical" ? "/brand/electric-smart-logo.jpg" : "") });
+        setCompanySettings({ ...data.company, logoUrl: companyLogoUrl(data.company.logoPath) });
         setBaseCatalog(data.catalog);
         setCustomCatalog([]);
         setCurrentNumber(nextOfferNumber(data.offers));
@@ -912,7 +904,7 @@ export default function Home() {
         ) : view === "offers" ? (
           <>
             <header className="topbar">
-              <div><span className="eyebrow">ELECTRICSMART</span><h1>Oferte</h1><p>{savedOffers.length} salvate și sincronizate</p></div>
+              <div><span className="eyebrow">FRIZEO OFERTE</span><h1>Oferte</h1><p>{savedOffers.length} salvate și sincronizate</p></div>
               <div className="top-actions">
                 <input ref={legacyOfferInput} hidden type="file" accept=".xlsx,.xls" onChange={(event) => event.target.files?.[0] && importLegacyOffer(event.target.files[0])} />
                 <button className="secondary" onClick={() => legacyOfferInput.current?.click()}>Importă ofertă veche</button>
@@ -984,7 +976,7 @@ export default function Home() {
                     <label>Status<select value={currentStatus} onChange={(event) => setCurrentStatus(event.target.value as OfferStatus)}>{offerStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
                     <div className="optional-client-fields wide">
                       <div><strong>Date opționale beneficiar</strong><span>Completează doar ce vrei să apară în ofertă.</span></div>
-                      <label>CUI / CNP<input value={clientDetails.taxId} onChange={(event) => updateClientDetail("taxId", event.target.value)} placeholder="Opțional" /></label>
+                      <label>CUI / CNP<input value={clientDetails.taxId} onChange={(event) => updateClientDetail("taxId", event.target.value)} placeholder="Opțional" />{taxIdHint(clientDetails.taxId) && <span className="field-hint error">{taxIdHint(clientDetails.taxId)}</span>}</label>
                       <label>Persoană de contact<input value={clientDetails.contactPerson} onChange={(event) => updateClientDetail("contactPerson", event.target.value)} placeholder="Opțional" /></label>
                       <label className="wide">Adresă<input value={clientDetails.address} onChange={(event) => updateClientDetail("address", event.target.value)} placeholder="Opțional" /></label>
                       <label>Telefon<input value={clientDetails.phone} onChange={(event) => updateClientDetail("phone", event.target.value)} placeholder="Opțional" /></label>
