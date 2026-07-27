@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
 import {
   ClientsView,
@@ -160,6 +161,7 @@ export default function Home() {
   const [currentOfferId, setCurrentOfferId] = useState<string | null>(null);
   const [currentNumber, setCurrentNumber] = useState("OF-2026-013");
   const [saveMessage, setSaveMessage] = useState("Ciornă locală");
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [baseCatalog, setBaseCatalog] = useState<CatalogItem[]>([]);
   const [customCatalog, setCustomCatalog] = useState<CatalogItem[]>([]);
@@ -415,12 +417,31 @@ export default function Home() {
     }
   }
 
-  function downloadPdf() {
-    const previousTitle = document.title;
-    const safeClient = (client || "client").replace(/[^a-zA-Z0-9ăâîșțĂÂÎȘȚ -]/g, "").trim().replace(/\s+/g, "-");
-    document.title = `${currentNumber}-${safeClient}`;
-    window.print();
-    window.setTimeout(() => { document.title = previousTitle; }, 500);
+  async function downloadPdf() {
+    setPdfBusy(true);
+    setSaveMessage("Se generează PDF-ul…");
+    try {
+      const { generateOfferPdf } = await import("../lib/generate-offer-pdf");
+      await generateOfferPdf({
+        number: currentNumber,
+        client,
+        title,
+        issueDate,
+        validityDays,
+        currency,
+        items,
+        labor,
+        discount,
+        notes,
+        company: companySettings,
+        totals,
+      });
+      setSaveMessage("PDF descărcat");
+    } catch (error) {
+      setSaveMessage(`PDF-ul nu a putut fi generat: ${(error as Error).message}`);
+    } finally {
+      setPdfBusy(false);
+    }
   }
 
   if (authLoading) {
@@ -495,7 +516,9 @@ export default function Home() {
                 <p>{saveMessage} · {currentNumber}</p>
               </div>
               <div className="top-actions">
-                <button className="secondary" onClick={downloadPdf} title="În fereastra deschisă alege Salvează ca PDF">Descarcă PDF</button>
+                <button className="secondary" onClick={downloadPdf} disabled={pdfBusy}>
+                  {pdfBusy ? "Se generează PDF…" : "Descarcă PDF"}
+                </button>
                 <button className="primary" onClick={saveOffer}>Salvează oferta</button>
               </div>
             </header>
@@ -580,7 +603,7 @@ export default function Home() {
                   <div className="segmented"><button className={previewMode === "detaliat" ? "selected" : ""} onClick={() => setPreviewMode("detaliat")}>Detaliat</button><button className={previewMode === "simplificat" ? "selected" : ""} onClick={() => setPreviewMode("simplificat")}>Simplificat</button></div>
                 </div>
                 <article className="paper">
-                  <div className="paper-header"><div><strong>{companySettings.name.toUpperCase()}</strong><span>CUI {companySettings.taxId} · {companySettings.registrationNumber}</span><span>{companySettings.address}</span><span>Tel. {companySettings.phone}{companySettings.email ? ` · ${companySettings.email}` : ""}</span>{companySettings.iban && <span>IBAN {companySettings.iban}{companySettings.bank ? ` · ${companySettings.bank}` : ""}</span>}</div><div className="paper-logo">ES</div></div>
+                  <div className="paper-header"><div><strong>{companySettings.name.toUpperCase()}</strong><span>CUI {companySettings.taxId} · {companySettings.registrationNumber}</span><span>{companySettings.address}</span><span>Tel. {companySettings.phone}{companySettings.email ? ` · ${companySettings.email}` : ""}</span>{companySettings.iban && <span>IBAN {companySettings.iban}{companySettings.bank ? ` · ${companySettings.bank}` : ""}</span>}</div><Image className="paper-logo-image" src="/brand/electric-smart-logo.jpg" alt="Electric Smart" width={76} height={65} priority /></div>
                   <div className="paper-title"><small>{currentNumber} · {issueDate.split("-").reverse().join(".")}</small><h3>{title || "Titlul lucrării"}</h3><p>Beneficiar: <strong>{client || "Beneficiar"}</strong></p></div>
                   <table className="paper-table">
                     <thead><tr><th>#</th><th>Descriere</th><th>UM</th><th>Cant.</th>{previewMode === "detaliat" && <><th>Preț cu TVA</th><th>Total cu TVA</th></>}</tr></thead>

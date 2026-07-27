@@ -109,7 +109,8 @@ table { border-collapse: collapse; width: 100%; }
 .paper-header { display: flex; justify-content: space-between; gap: 14px; font-size: 7px; color: #555e6d; line-height: 1.5; }
 .paper-header strong, .paper-header span { display: block; }
 .paper-header strong { color: var(--ink); font-size: 9px; }
-.paper-logo { width: 38px; height: 38px; display: grid; place-items: center; color: var(--navy); background: #facc15; font-weight: 900; border-radius: 50% 10% 50% 50%; }
+.paper-logo-image { width: 76px; height: 65px; object-fit: contain; }
+.top-actions button:disabled { opacity: .65; cursor: wait; }
 .paper-title { padding: 27px 0 21px; text-align: center; }
 .paper-title small { color: #88909d; font-size: 6px; text-transform: uppercase; letter-spacing: .12em; }
 .paper-title h3 { font-size: 14px; margin: 8px 0 6px; text-transform: uppercase; }
