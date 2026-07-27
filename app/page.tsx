@@ -1,12 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import {
   ClientsView,
   SettingsView,
   type ClientRecord,
   type CompanySettings,
 } from "./management-panels";
+import { AuthScreen } from "./auth-screen";
+import { supabase } from "../lib/supabase";
+import {
+  addRemoteCatalogItems,
+  deleteRemoteClient,
+  deleteRemoteOffer,
+  loadBetaData,
+  saveRemoteOffer,
+  syncClients,
+  syncCompany,
+} from "../lib/oferte-data";
 
 type OfferItem = {
   id: number;
@@ -50,11 +62,7 @@ type SavedOffer = {
   updatedAt: string;
 };
 
-const OFFERS_KEY = "electro-oferte:offers:v1";
 const DRAFT_KEY = "electro-oferte:draft:v1";
-const CLIENTS_KEY = "electro-oferte:clients:v1";
-const SETTINGS_KEY = "electro-oferte:settings:v1";
-const CUSTOM_CATALOG_KEY = "electro-oferte:custom-catalog:v1";
 
 const initialClients: ClientRecord[] = [
   { id: "client-modern", type: "firmă", name: "Modern Construct Service", taxId: "", address: "Piatra Neamț", contactPerson: "", phone: "", email: "" },
@@ -135,6 +143,8 @@ function calculateOfferTotals(items: OfferItem[], discount: number, labor: numbe
 }
 
 export default function Home() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [view, setView] = useState<"editor" | "offers" | "clients" | "settings">("editor");
   const [items, setItems] = useState(initialItems);
   const [client, setClient] = useState("Modern Construct Service");
@@ -160,53 +170,55 @@ export default function Home() {
   const [companySettings, setCompanySettings] = useState<CompanySettings>(initialCompanySettings);
 
   useEffect(() => {
-    try {
-      const storedOffers = JSON.parse(localStorage.getItem(OFFERS_KEY) ?? "[]") as SavedOffer[];
-      setSavedOffers(storedOffers);
-      setClients(JSON.parse(localStorage.getItem(CLIENTS_KEY) ?? JSON.stringify(initialClients)));
-      setCompanySettings(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? JSON.stringify(initialCompanySettings)));
-      setCustomCatalog(JSON.parse(localStorage.getItem(CUSTOM_CATALOG_KEY) ?? "[]"));
-      setCurrentNumber(nextOfferNumber(storedOffers));
-      const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null") as Partial<SavedOffer> | null;
-      if (draft) {
-        setClient(draft.client ?? client);
-        setTitle(draft.title ?? title);
-        setIssueDate(draft.issueDate ?? today());
-        setValidityDays(draft.validityDays ?? "30");
-        setCurrency(draft.currency ?? "RON");
-        setItems(draft.items?.length ? draft.items : initialItems);
-        setLabor(draft.labor ?? 0);
-        setDiscount(draft.discount ?? 0);
-        setNotes(draft.notes ?? notes);
-        setCurrentOfferId(draft.id ?? null);
-        setCurrentNumber(draft.number ?? nextOfferNumber(storedOffers));
-      }
-    } catch {
-      setSaveMessage("Datele locale nu au putut fi citite");
-    }
-    fetch("/catalog.json")
-      .then((response) => response.json())
-      .then((data: CatalogItem[]) => setBaseCatalog(data))
-      .catch(() => setBaseCatalog([]));
-    setHydrated(true);
-    // Valorile inițiale sunt intenționat citite o singură dată.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+      setAuthLoading(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (!session?.user) setHydrated(false);
+      setAuthLoading(false);
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
-  }, [hydrated, clients]);
+    if (!user) return;
+    let cancelled = false;
+    loadBetaData(user.id, user.email ?? "teomaris27@gmail.com")
+      .then((data) => {
+        if (cancelled) return;
+        setSavedOffers(data.offers);
+        setClients(data.clients);
+        setCompanySettings(data.company);
+        setBaseCatalog(data.catalog);
+        setCustomCatalog([]);
+        setCurrentNumber(nextOfferNumber(data.offers));
+        setSaveMessage("Sincronizat cu Supabase");
+        setHydrated(true);
+      })
+      .catch((error: Error) => {
+        if (cancelled) return;
+        setSaveMessage(`Eroare Supabase: ${error.message}`);
+      });
+    return () => { cancelled = true; };
+  }, [user]);
 
   useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(companySettings));
-  }, [hydrated, companySettings]);
+    if (!hydrated || !user) return;
+    const timer = window.setTimeout(() => {
+      syncClients(user.id, clients).catch((error: Error) => setSaveMessage(`Eroare clienți: ${error.message}`));
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [hydrated, user, clients]);
 
   useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(CUSTOM_CATALOG_KEY, JSON.stringify(customCatalog));
-  }, [hydrated, customCatalog]);
+    if (!hydrated || !user) return;
+    const timer = window.setTimeout(() => {
+      syncCompany(user.id, companySettings).catch((error: Error) => setSaveMessage(`Eroare setări: ${error.message}`));
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [hydrated, user, companySettings]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -218,7 +230,6 @@ export default function Home() {
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    setSaveMessage("Ciornă salvată automat pe acest dispozitiv");
   }, [hydrated, currentOfferId, currentNumber, client, title, issueDate, validityDays, currency, items, labor, discount, notes]);
 
   const catalog = useMemo(() => [...customCatalog, ...baseCatalog], [customCatalog, baseCatalog]);
@@ -272,7 +283,12 @@ export default function Home() {
     setItems(items.filter((item) => item.id !== id));
   }
 
-  function saveOffer() {
+  async function saveOffer() {
+    if (!user || !hydrated) {
+      setSaveMessage("Așteaptă finalizarea sincronizării");
+      return;
+    }
+    setSaveMessage("Se salvează în Supabase…");
     const id = currentOfferId ?? crypto.randomUUID();
     const number = currentOfferId ? currentNumber : nextOfferNumber(savedOffers);
     const offer: SavedOffer = {
@@ -283,51 +299,56 @@ export default function Home() {
     const next = savedOffers.some((entry) => entry.id === id)
       ? savedOffers.map((entry) => entry.id === id ? offer : entry)
       : [offer, ...savedOffers];
-    setSavedOffers(next);
-    setCurrentOfferId(id);
-    setCurrentNumber(number);
-    localStorage.setItem(OFFERS_KEY, JSON.stringify(next));
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(offer));
+    try {
+      let clientAdded = false;
+      const clientName = client.trim();
+      let matchingClient = clients.find((entry) => normalizeName(entry.name) === normalizeName(clientName));
+      if (clientName && !matchingClient) {
+        matchingClient = { id: crypto.randomUUID(), type: "firmă", name: clientName, taxId: "", address: "", contactPerson: "", phone: "", email: "" };
+        const nextClients = [matchingClient, ...clients];
+        setClients(nextClients);
+        await syncClients(user.id, nextClients);
+        clientAdded = true;
+      }
 
-    let clientAdded = false;
-    const clientName = client.trim();
-    if (clientName && !clients.some((entry) => normalizeName(entry.name) === normalizeName(clientName))) {
-      const nextClients = [{ id: crypto.randomUUID(), type: "firmă" as const, name: clientName, taxId: "", address: "", contactPerson: "", phone: "", email: "" }, ...clients];
-      setClients(nextClients);
-      localStorage.setItem(CLIENTS_KEY, JSON.stringify(nextClients));
-      clientAdded = true;
-    }
-
-    const knownItems = new Set(catalog.map((entry) => `${entry.kind}:${normalizeName(entry.name)}:${entry.unit}`));
-    const newCatalogItems: CatalogItem[] = [];
-    items.forEach((item) => {
-      const itemName = item.name.trim();
-      const kind = item.kind ?? "material";
-      const identity = `${kind}:${normalizeName(itemName)}:${item.unit}`;
-      if (!itemName || knownItems.has(identity)) return;
-      knownItems.add(identity);
-      newCatalogItems.push({
-        id: `CUS-${crypto.randomUUID()}`,
-        code: "",
-        name: itemName,
-        category: kind === "labor" ? "Servicii și manoperă" : kind === "expense" ? "Costuri auxiliare" : "Materiale personalizate",
-        subcategory: "Adăugat din ofertă",
-        kind,
-        unit: item.unit,
-        unitPrice: item.unitPrice,
-        currency,
-        vatRate: item.vatRate,
-        specifications: "",
-        sourceType: "adăugat manual",
+      const knownItems = new Set(catalog.map((entry) => `${entry.kind}:${normalizeName(entry.name)}:${entry.unit}`));
+      const newCatalogItems: CatalogItem[] = [];
+      items.forEach((item) => {
+        const itemName = item.name.trim();
+        const kind = item.kind ?? "material";
+        const identity = `${kind}:${normalizeName(itemName)}:${item.unit}`;
+        if (!itemName || knownItems.has(identity)) return;
+        knownItems.add(identity);
+        newCatalogItems.push({
+          id: crypto.randomUUID(),
+          code: "",
+          name: itemName,
+          category: kind === "labor" ? "Servicii și manoperă" : kind === "expense" ? "Costuri auxiliare" : "Materiale personalizate",
+          subcategory: "Adăugat din ofertă",
+          kind,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          currency,
+          vatRate: item.vatRate,
+          specifications: "",
+          sourceType: "adăugat manual",
+        });
       });
-    });
-    if (newCatalogItems.length) {
-      const nextCatalog = [...newCatalogItems, ...customCatalog];
-      setCustomCatalog(nextCatalog);
-      localStorage.setItem(CUSTOM_CATALOG_KEY, JSON.stringify(nextCatalog));
+      if (newCatalogItems.length) {
+        const insertedCatalog = await addRemoteCatalogItems(user.id, newCatalogItems);
+        setCustomCatalog((current) => [...insertedCatalog, ...current]);
+      }
+
+      await saveRemoteOffer(user.id, offer, matchingClient?.id ?? null);
+      setSavedOffers(next);
+      setCurrentOfferId(id);
+      setCurrentNumber(number);
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(offer));
+      const additions = [clientAdded ? "client nou" : "", newCatalogItems.length ? `${newCatalogItems.length} articole în catalog` : ""].filter(Boolean);
+      setSaveMessage(`Salvat în Supabase la ${new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" })}${additions.length ? ` · adăugat: ${additions.join(", ")}` : ""}`);
+    } catch (error) {
+      setSaveMessage(`Salvarea a eșuat: ${(error as Error).message}`);
     }
-    const additions = [clientAdded ? "client nou" : "", newCatalogItems.length ? `${newCatalogItems.length} articole în catalog` : ""].filter(Boolean);
-    setSaveMessage(`Salvat local la ${new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" })}${additions.length ? ` · adăugat: ${additions.join(", ")}` : ""}`);
   }
 
   function newOffer() {
@@ -373,11 +394,33 @@ export default function Home() {
     setCurrentOfferId(null);
   }
 
-  function deleteOffer(id: string) {
-    if (!window.confirm("Ștergi această ofertă de pe dispozitiv?")) return;
-    const next = savedOffers.filter((offer) => offer.id !== id);
-    setSavedOffers(next);
-    localStorage.setItem(OFFERS_KEY, JSON.stringify(next));
+  async function deleteOffer(id: string) {
+    if (!window.confirm("Ștergi definitiv această ofertă?")) return;
+    try {
+      await deleteRemoteOffer(id);
+      setSavedOffers(savedOffers.filter((offer) => offer.id !== id));
+      setSaveMessage("Oferta a fost ștearsă din Supabase");
+    } catch (error) {
+      setSaveMessage(`Ștergerea a eșuat: ${(error as Error).message}`);
+    }
+  }
+
+  async function handleDeleteClient(id: string) {
+    try {
+      await deleteRemoteClient(id);
+      setSaveMessage("Clientul a fost șters din Supabase");
+    } catch (error) {
+      setSaveMessage(`Ștergerea clientului a eșuat: ${(error as Error).message}`);
+      throw error;
+    }
+  }
+
+  if (authLoading) {
+    return <main className="auth-page"><section className="auth-card"><h1>Se verifică sesiunea…</h1></section></main>;
+  }
+  if (!user) return <AuthScreen />;
+  if (!hydrated) {
+    return <main className="auth-page"><section className="auth-card"><h1>Pregătim versiunea beta…</h1><p>{saveMessage}</p></section></main>;
   }
 
   return (
@@ -397,13 +440,13 @@ export default function Home() {
         <div className="company-card">
           <span className="company-avatar">ES</span>
           <div><strong>ElectricSmart.Co</strong><small>CUI 47684690</small></div>
-          <span>⌄</span>
+          <button className="logout-button" onClick={() => supabase.auth.signOut()} title="Ieșire">↪</button>
         </div>
       </aside>
 
       <section className="workspace">
         {view === "clients" ? (
-          <ClientsView clients={clients} onChange={setClients} onCreateOffer={newOfferForClient} />
+          <ClientsView clients={clients} onChange={setClients} onCreateOffer={newOfferForClient} onDelete={handleDeleteClient} />
         ) : view === "settings" ? (
           <SettingsView settings={companySettings} onChange={setCompanySettings} />
         ) : view === "offers" ? (
@@ -413,7 +456,7 @@ export default function Home() {
               <button className="primary" onClick={newOffer}>＋ Ofertă nouă</button>
             </header>
             <section className="offers-page">
-              <div className="local-notice"><strong>Salvare locală pentru testare</strong><span>Ofertele sunt disponibile numai în acest browser. După conectarea bazei de date vor fi sincronizate între dispozitive.</span></div>
+              <div className="local-notice"><strong>Versiune beta sincronizată</strong><span>Ofertele sunt salvate în proiectul Supabase Oferte și sunt disponibile după autentificare.</span></div>
               {savedOffers.length === 0 ? (
                 <div className="empty-state"><span>▤</span><h2>Nu există oferte salvate</h2><p>Creează prima ofertă și verifică fluxul complet înainte de conectarea bazei de date.</p><button className="primary" onClick={newOffer}>Creează oferta</button></div>
               ) : (

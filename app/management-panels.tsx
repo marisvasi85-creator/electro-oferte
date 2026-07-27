@@ -28,9 +28,10 @@ type ClientsViewProps = {
   clients: ClientRecord[];
   onChange: (clients: ClientRecord[]) => void;
   onCreateOffer: (clientName: string) => void;
+  onDelete?: (id: string) => Promise<void>;
 };
 
-export function ClientsView({ clients, onChange, onCreateOffer }: ClientsViewProps) {
+export function ClientsView({ clients, onChange, onCreateOffer, onDelete }: ClientsViewProps) {
   function addClient() {
     onChange([
       {
@@ -51,19 +52,20 @@ export function ClientsView({ clients, onChange, onCreateOffer }: ClientsViewPro
     onChange(clients.map((client) => client.id === id ? { ...client, [field]: value } : client));
   }
 
-  function removeClient(id: string) {
-    if (!window.confirm("Ștergi acest client de pe dispozitiv?")) return;
+  async function removeClient(id: string) {
+    if (!window.confirm("Ștergi definitiv acest client?")) return;
+    await onDelete?.(id);
     onChange(clients.filter((client) => client.id !== id));
   }
 
   return (
     <>
       <header className="topbar">
-        <div><span className="eyebrow">RELAȚII COMERCIALE</span><h1>Clienți</h1><p>{clients.length} clienți salvați pe acest dispozitiv</p></div>
+        <div><span className="eyebrow">RELAȚII COMERCIALE</span><h1>Clienți</h1><p>{clients.length} clienți sincronizați</p></div>
         <button className="primary" onClick={addClient}>＋ Client nou</button>
       </header>
       <section className="management-page">
-        <div className="local-notice"><strong>Salvare locală pentru testare</strong><span>Datele clienților nu sunt încă sincronizate și nu părăsesc acest browser.</span></div>
+        <div className="local-notice"><strong>Sincronizare Supabase activă</strong><span>Modificările sunt salvate automat în proiectul Oferte.</span></div>
         <div className="management-grid">
           {clients.map((client) => (
             <article className="client-card card" key={client.id}>
@@ -107,7 +109,7 @@ export function SettingsView({ settings, onChange }: SettingsViewProps) {
     <>
       <header className="topbar">
         <div><span className="eyebrow">CONFIGURARE</span><h1>Setările firmei</h1><p>Date utilizate automat în ofertele și PDF-urile noi</p></div>
-        <span className="saved-badge">Salvat local automat</span>
+        <span className="saved-badge">Sincronizat automat</span>
       </header>
       <section className="management-page settings-layout">
         <section className="card settings-card">
