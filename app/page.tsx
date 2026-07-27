@@ -168,7 +168,7 @@ function calculateOfferTotals(items: OfferItem[], discount: number, labor: numbe
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [view, setView] = useState<"editor" | "offers" | "clients" | "settings">("editor");
+  const [view, setView] = useState<"home" | "editor" | "offers" | "clients" | "settings">("home");
   const [items, setItems] = useState(initialItems);
   const [client, setClient] = useState("Modern Construct Service");
   const [clientDetails, setClientDetails] = useState<OfferClientDetails>(emptyClientDetails);
@@ -259,6 +259,20 @@ export default function Home() {
 
   const catalog = useMemo(() => [...customCatalog, ...baseCatalog], [customCatalog, baseCatalog]);
   const totals = useMemo(() => calculateOfferTotals(items, discount, labor), [items, discount, labor]);
+  const dashboard = useMemo(() => {
+    const ronValue = savedOffers
+      .filter((offer) => offer.currency === "RON")
+      .reduce((sum, offer) => sum + calculateOfferTotals(offer.items, offer.discount, offer.labor).grand, 0);
+    const euroValue = savedOffers
+      .filter((offer) => offer.currency === "EUR")
+      .reduce((sum, offer) => sum + calculateOfferTotals(offer.items, offer.discount, offer.labor).grand, 0);
+    return {
+      ronValue,
+      euroValue,
+      drafts: savedOffers.filter((offer) => offer.status === "ciornă").length,
+      recent: savedOffers.slice(0, 5),
+    };
+  }, [savedOffers]);
 
   const categories = useMemo(
     () => ["Toate", ...Array.from(new Set(catalog.map((item) => item.category))).sort()],
@@ -505,7 +519,7 @@ export default function Home() {
           <div><strong>Electro Oferte</strong><span>ElectricSmart</span></div>
         </div>
         <nav aria-label="Navigare principală">
-          <button><Icon>⌂</Icon>Panou principal</button>
+          <button className={view === "home" ? "active" : ""} onClick={() => setView("home")}><Icon>⌂</Icon>Acasă</button>
           <button className={view === "offers" ? "active" : ""} onClick={() => setView("offers")}><Icon>▤</Icon>Oferte <span className="count">{savedOffers.length}</span></button>
           <button className={view === "clients" ? "active" : ""} onClick={() => setView("clients")}><Icon>♙</Icon>Clienți <span className="count">{clients.length}</span></button>
           <button onClick={() => setCatalogOpen(true)}><Icon>◇</Icon>Catalog <span className="count">{catalog.length}</span></button>
@@ -519,7 +533,46 @@ export default function Home() {
       </aside>
 
       <section className="workspace">
-        {view === "clients" ? (
+        {view === "home" ? (
+          <>
+            <header className="topbar">
+              <div><span className="eyebrow">ELECTRICSMART</span><h1>Panou principal</h1><p>O privire rapidă asupra activității de ofertare</p></div>
+              <button className="primary" onClick={newOffer}>＋ Ofertă nouă</button>
+            </header>
+            <section className="dashboard-page">
+              <div className="welcome-card">
+                <div><span className="eyebrow">BUN VENIT</span><h2>Ce vrei să faci astăzi?</h2><p>Creează o ofertă nouă sau continuă rapid una dintre ofertele recente.</p></div>
+                <div className="dashboard-actions"><button className="primary" onClick={newOffer}>＋ Creează ofertă</button><button className="secondary" onClick={() => setView("offers")}>Vezi toate ofertele</button></div>
+              </div>
+              <div className="dashboard-stats">
+                <button onClick={() => setView("offers")}><span>▤</span><div><small>Oferte salvate</small><strong>{savedOffers.length}</strong></div></button>
+                <button onClick={() => setView("clients")}><span>♙</span><div><small>Clienți</small><strong>{clients.length}</strong></div></button>
+                <button onClick={() => setCatalogOpen(true)}><span>◇</span><div><small>Articole în catalog</small><strong>{catalog.length}</strong></div></button>
+                <button onClick={() => setView("offers")}><span>◷</span><div><small>Ciorne în lucru</small><strong>{dashboard.drafts}</strong></div></button>
+              </div>
+              <div className="dashboard-grid">
+                <section className="card recent-card">
+                  <div className="dashboard-section-title"><div><h2>Oferte recente</h2><p>Ultimele documente modificate</p></div><button onClick={() => setView("offers")}>Vezi toate →</button></div>
+                  {dashboard.recent.length ? dashboard.recent.map((offer) => (
+                    <button className="recent-offer" key={offer.id} onClick={() => openOffer(offer)}>
+                      <span className="recent-icon">▤</span>
+                      <span><strong>{offer.client || "Beneficiar necompletat"}</strong><small>{offer.number} · {offer.title || "Lucrare fără titlu"}</small></span>
+                      <span className="recent-total">{money.format(calculateOfferTotals(offer.items, offer.discount, offer.labor).grand)} {offer.currency === "RON" ? "lei" : "EUR"}</span>
+                    </button>
+                  )) : <div className="dashboard-empty"><p>Nu există încă oferte salvate.</p><button className="primary" onClick={newOffer}>Creează prima ofertă</button></div>}
+                </section>
+                <section className="card value-card">
+                  <span className="eyebrow">VALOARE OFERTE</span>
+                  <h2>{money.format(dashboard.ronValue)} lei</h2>
+                  {dashboard.euroValue > 0 && <strong>+ {money.format(dashboard.euroValue)} EUR</strong>}
+                  <p>Totalul ofertelor salvate, indiferent de status.</p>
+                  <div><span>Oferte</span><strong>{savedOffers.length}</strong></div>
+                  <div><span>Ciorne</span><strong>{dashboard.drafts}</strong></div>
+                </section>
+              </div>
+            </section>
+          </>
+        ) : view === "clients" ? (
           <ClientsView clients={clients} onChange={setClients} onCreateOffer={newOfferForClient} onDelete={handleDeleteClient} />
         ) : view === "settings" ? (
           <SettingsView settings={companySettings} onChange={setCompanySettings} />
