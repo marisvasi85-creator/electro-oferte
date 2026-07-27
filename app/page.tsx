@@ -51,6 +51,7 @@ type SavedOffer = {
   id: string;
   number: string;
   client: string;
+  clientDetails?: OfferClientDetails;
   title: string;
   issueDate: string;
   validityDays: string;
@@ -63,6 +64,16 @@ type SavedOffer = {
   status: "ciornă" | "trimisă" | "acceptată" | "respinsă";
   updatedAt: string;
 };
+
+type OfferClientDetails = {
+  taxId: string;
+  address: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+};
+
+const emptyClientDetails: OfferClientDetails = { taxId: "", address: "", contactPerson: "", phone: "", email: "" };
 
 type PdfColumns = {
   unit: boolean;
@@ -160,6 +171,7 @@ export default function Home() {
   const [view, setView] = useState<"editor" | "offers" | "clients" | "settings">("editor");
   const [items, setItems] = useState(initialItems);
   const [client, setClient] = useState("Modern Construct Service");
+  const [clientDetails, setClientDetails] = useState<OfferClientDetails>(emptyClientDetails);
   const [title, setTitle] = useState("Instalație electrică locuință");
   const [issueDate, setIssueDate] = useState(today());
   const [validityDays, setValidityDays] = useState("30");
@@ -238,12 +250,12 @@ export default function Home() {
     const draft: Partial<SavedOffer> = {
       id: currentOfferId ?? undefined,
       number: currentNumber,
-      client, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns,
+      client, clientDetails, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns,
       status: "ciornă",
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [hydrated, currentOfferId, currentNumber, client, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns]);
+  }, [hydrated, currentOfferId, currentNumber, client, clientDetails, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns]);
 
   const catalog = useMemo(() => [...customCatalog, ...baseCatalog], [customCatalog, baseCatalog]);
   const totals = useMemo(() => calculateOfferTotals(items, discount, labor), [items, discount, labor]);
@@ -296,6 +308,22 @@ export default function Home() {
     setItems(items.filter((item) => item.id !== id));
   }
 
+  function changeClient(value: string) {
+    setClient(value);
+    const match = clients.find((entry) => normalizeName(entry.name) === normalizeName(value));
+    setClientDetails(match ? {
+      taxId: match.taxId,
+      address: match.address,
+      contactPerson: match.contactPerson,
+      phone: match.phone,
+      email: match.email,
+    } : emptyClientDetails);
+  }
+
+  function updateClientDetail(field: keyof OfferClientDetails, value: string) {
+    setClientDetails((current) => ({ ...current, [field]: value }));
+  }
+
   async function saveOffer() {
     if (!user || !hydrated) {
       setSaveMessage("Așteaptă finalizarea sincronizării");
@@ -305,7 +333,7 @@ export default function Home() {
     const id = currentOfferId ?? crypto.randomUUID();
     const number = currentOfferId ? currentNumber : nextOfferNumber(savedOffers);
     const offer: SavedOffer = {
-      id, number, client, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns,
+      id, number, client, clientDetails, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns,
       status: "ciornă",
       updatedAt: new Date().toISOString(),
     };
@@ -317,7 +345,7 @@ export default function Home() {
       const clientName = client.trim();
       let matchingClient = clients.find((entry) => normalizeName(entry.name) === normalizeName(clientName));
       if (clientName && !matchingClient) {
-        matchingClient = { id: crypto.randomUUID(), type: "firmă", name: clientName, taxId: "", address: "", contactPerson: "", phone: "", email: "" };
+        matchingClient = { id: crypto.randomUUID(), type: "firmă", name: clientName, ...clientDetails };
         const nextClients = [matchingClient, ...clients];
         setClients(nextClients);
         await syncClients(user.id, nextClients);
@@ -368,6 +396,7 @@ export default function Home() {
     setCurrentOfferId(null);
     setCurrentNumber(nextOfferNumber(savedOffers));
     setClient("");
+    setClientDetails(emptyClientDetails);
     setTitle("");
     setIssueDate(today());
     setValidityDays(String(companySettings.defaultValidity));
@@ -383,7 +412,7 @@ export default function Home() {
 
   function newOfferForClient(clientName: string) {
     newOffer();
-    setClient(clientName);
+    changeClient(clientName);
     setValidityDays(String(companySettings.defaultValidity));
     setNotes(`Garanție: ${companySettings.defaultWarranty} luni\nValabilitate: ${companySettings.defaultValidity} zile de la data întocmirii`);
   }
@@ -392,6 +421,7 @@ export default function Home() {
     setCurrentOfferId(offer.id);
     setCurrentNumber(offer.number);
     setClient(offer.client);
+    setClientDetails(offer.clientDetails ?? emptyClientDetails);
     setTitle(offer.title);
     setIssueDate(offer.issueDate);
     setValidityDays(offer.validityDays);
@@ -438,6 +468,7 @@ export default function Home() {
       await generateOfferPdf({
         number: currentNumber,
         client,
+        clientDetails,
         title,
         issueDate,
         validityDays,
@@ -543,13 +574,21 @@ export default function Home() {
                   <div className="section-heading"><span className="step">1</span><div><h2>Detalii ofertă</h2><p>Informațiile de bază ale lucrării</p></div></div>
                   <div className="form-grid">
                     <label>Beneficiar
-                      <input list="client-options" value={client} onChange={(event) => setClient(event.target.value)} />
+                      <input list="client-options" value={client} onChange={(event) => changeClient(event.target.value)} />
                       <datalist id="client-options">{clients.map((entry) => <option key={entry.id} value={entry.name} />)}</datalist>
                     </label>
                     <label>Data emiterii<input type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} /></label>
                     <label className="wide">Titlul lucrării<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
                     <label>Valabilitate<select value={validityDays} onChange={(event) => setValidityDays(event.target.value)}><option value="15">15 zile</option><option value="30">30 zile</option><option value="60">60 zile</option></select></label>
                     <label>Monedă<select value={currency} onChange={(event) => setCurrency(event.target.value)}><option>RON</option><option>EUR</option></select></label>
+                    <div className="optional-client-fields wide">
+                      <div><strong>Date opționale beneficiar</strong><span>Completează doar ce vrei să apară în ofertă.</span></div>
+                      <label>CUI / CNP<input value={clientDetails.taxId} onChange={(event) => updateClientDetail("taxId", event.target.value)} placeholder="Opțional" /></label>
+                      <label>Persoană de contact<input value={clientDetails.contactPerson} onChange={(event) => updateClientDetail("contactPerson", event.target.value)} placeholder="Opțional" /></label>
+                      <label className="wide">Adresă<input value={clientDetails.address} onChange={(event) => updateClientDetail("address", event.target.value)} placeholder="Opțional" /></label>
+                      <label>Telefon<input value={clientDetails.phone} onChange={(event) => updateClientDetail("phone", event.target.value)} placeholder="Opțional" /></label>
+                      <label>E-mail<input type="email" value={clientDetails.email} onChange={(event) => updateClientDetail("email", event.target.value)} placeholder="Opțional" /></label>
+                    </div>
                   </div>
                 </section>
 
@@ -644,7 +683,7 @@ export default function Home() {
                 </div>
                 <article className="paper">
                   <div className="paper-header"><div><strong>{companySettings.name.toUpperCase()}</strong><span>CUI {companySettings.taxId} · {companySettings.registrationNumber}</span><span>{companySettings.address}</span><span>Tel. {companySettings.phone}{companySettings.email ? ` · ${companySettings.email}` : ""}</span>{companySettings.iban && <span>IBAN {companySettings.iban}{companySettings.bank ? ` · ${companySettings.bank}` : ""}</span>}</div><Image className="paper-logo-image" src="/brand/electric-smart-logo.jpg" alt="Electric Smart" width={76} height={65} priority /></div>
-                  <div className="paper-title"><small>{currentNumber} · {issueDate.split("-").reverse().join(".")}</small><h3>{title || "Titlul lucrării"}</h3><p>Beneficiar: <strong>{client || "Beneficiar"}</strong></p></div>
+                  <div className="paper-title"><small>{currentNumber} · {issueDate.split("-").reverse().join(".")}</small><h3>{title || "Titlul lucrării"}</h3><p>Beneficiar: <strong>{client || "Beneficiar"}</strong></p>{Object.values(clientDetails).some(Boolean) && <div className="paper-client-details">{clientDetails.taxId && <span>CUI/CNP: {clientDetails.taxId}</span>}{clientDetails.address && <span>{clientDetails.address}</span>}{clientDetails.contactPerson && <span>Contact: {clientDetails.contactPerson}</span>}{(clientDetails.phone || clientDetails.email) && <span>{[clientDetails.phone, clientDetails.email].filter(Boolean).join(" · ")}</span>}</div>}</div>
                   <table className="paper-table">
                     <thead><tr><th>#</th><th>Descriere</th>{pdfColumns.unit && <th className="center">UM</th>}{pdfColumns.quantity && <th className="numeric">Cantitate</th>}{pdfColumns.unitPrice && <th className="numeric">Preț unitar cu TVA</th>}{pdfColumns.total && <th className="numeric">Total cu TVA</th>}</tr></thead>
                     <tbody>{items.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.name}</td>{pdfColumns.unit && <td className="center">{item.unit}</td>}{pdfColumns.quantity && <td className="numeric">{item.quantity}</td>}{pdfColumns.unitPrice && <td className="numeric">{money.format(item.unitPrice * (1 + item.vatRate / 100))}</td>}{pdfColumns.total && <td className="numeric">{money.format(item.quantity * item.unitPrice * (1 + item.vatRate / 100))}</td>}</tr>)}</tbody>

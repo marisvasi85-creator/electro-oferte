@@ -43,6 +43,13 @@ export type RemoteOffer = {
   id: string;
   number: string;
   client: string;
+  clientDetails?: {
+    taxId: string;
+    address: string;
+    contactPerson: string;
+    phone: string;
+    email: string;
+  };
   title: string;
   issueDate: string;
   validityDays: string;
@@ -182,6 +189,13 @@ export async function loadBetaData(userId: string, email: string) {
     id: row.id,
     number: row.number,
     client: row.client_name,
+    clientDetails: {
+      taxId: String(row.client_details?.taxId ?? ""),
+      address: String(row.client_details?.address ?? ""),
+      contactPerson: String(row.client_details?.contactPerson ?? ""),
+      phone: String(row.client_details?.phone ?? ""),
+      email: String(row.client_details?.email ?? ""),
+    },
     title: row.title,
     issueDate: row.issue_date,
     validityDays: String(row.validity_days),
@@ -271,6 +285,7 @@ export async function saveRemoteOffer(
     client_id: clientId,
     number: offer.number,
     client_name: offer.client,
+    client_details: offer.clientDetails ?? {},
     title: offer.title,
     issue_date: offer.issueDate,
     validity_days: Number(offer.validityDays),

@@ -31,6 +31,13 @@ type PdfTotals = {
 type GenerateOfferPdfInput = {
   number: string;
   client: string;
+  clientDetails: {
+    taxId: string;
+    address: string;
+    contactPerson: string;
+    phone: string;
+    email: string;
+  };
   title: string;
   issueDate: string;
   validityDays: string;
@@ -163,10 +170,22 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
   drawRight(page, `Valabilitate: ${input.validityDays} zile`, 555, 674, regular, 8, gray);
   page.drawText("Beneficiar", { x: 40, y: 642, font: regular, size: 7, color: gray });
   page.drawText(input.client || "Beneficiar necompletat", { x: 40, y: 626, font: bold, size: 11, color: navy });
+  const clientDetailLines = [
+    input.clientDetails.taxId ? `CUI/CNP: ${input.clientDetails.taxId}` : "",
+    input.clientDetails.address,
+    [
+      input.clientDetails.contactPerson ? `Contact: ${input.clientDetails.contactPerson}` : "",
+      input.clientDetails.phone,
+      input.clientDetails.email,
+    ].filter(Boolean).join(" | "),
+  ].filter(Boolean).flatMap((line) => wrapText(line, regular, 7, 245));
+  clientDetailLines.slice(0, 5).forEach((line, index) => {
+    page.drawText(line, { x: 40, y: 612 - index * 10, font: regular, size: 7, color: gray });
+  });
   page.drawText("Lucrare", { x: 300, y: 642, font: regular, size: 7, color: gray });
   const titleLines = wrapText(input.title || "Lucrare fără titlu", bold, 10, 250).slice(0, 2);
   titleLines.forEach((line, index) => page.drawText(line, { x: 300, y: 626 - index * 12, font: bold, size: 10, color: navy }));
-  y = drawTableHeader(page, 590);
+  y = drawTableHeader(page, clientDetailLines.length ? 550 : 590);
 
   for (let index = 0; index < input.items.length; index += 1) {
     const item = input.items[index];

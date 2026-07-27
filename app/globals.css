@@ -56,6 +56,11 @@ h1 { font-size: 24px; margin: 7px 0 3px; letter-spacing: -.5px; }
 .step { width: 26px; height: 26px; border-radius: 7px; background: var(--blue-soft); color: var(--blue); display: grid; place-items: center; font-weight: 750; font-size: 12px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .form-grid .wide { grid-column: 1 / -1; }
+.optional-client-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 13px; margin-top: 2px; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: #fafbfc; }
+.optional-client-fields > div { grid-column: 1 / -1; }
+.optional-client-fields > div strong, .optional-client-fields > div span { display: block; }
+.optional-client-fields > div strong { font-size: 11px; }
+.optional-client-fields > div span { margin-top: 2px; color: var(--muted); font-size: 9px; }
 label { font-size: 11px; font-weight: 600; color: #4b5565; display: grid; gap: 6px; }
 input, select, textarea { color: var(--ink); border: 1px solid #d9dee7; border-radius: 7px; background: #fff; outline: none; }
 input:focus, select:focus, textarea:focus { border-color: #8db1ff; box-shadow: 0 0 0 3px #2563eb12; }
@@ -121,6 +126,7 @@ table { border-collapse: collapse; width: 100%; }
 .paper-title small { color: #88909d; font-size: 6px; text-transform: uppercase; letter-spacing: .12em; }
 .paper-title h3 { font-size: 14px; margin: 8px 0 6px; text-transform: uppercase; }
 .paper-title p { font-size: 7px; color: #596272; margin: 0; }
+.paper-client-details { display: grid; gap: 2px; margin-top: 6px; color: var(--muted); font-size: 6.5px; }
 .paper-table { font-size: 6.5px; }
 .paper-table th { background: var(--navy); color: white; padding: 6px 5px; text-align: left; }
 .paper-table td { padding: 5px; border-bottom: 1px solid #e7e9ed; }
@@ -221,6 +227,8 @@ table { border-collapse: collapse; width: 100%; }
   .content-grid { padding: 16px; }
   .form-grid, .bottom-grid, .compact-fields { grid-template-columns: 1fr; }
   .form-grid .wide { grid-column: auto; }
+  .optional-client-fields { grid-template-columns: 1fr; }
+  .optional-client-fields > div, .optional-client-fields .wide { grid-column: auto; }
   .items-heading { align-items: flex-start; flex-wrap: wrap; }
   .item-actions { width: 100%; margin-left: 38px; }
   .offers-page { padding: 16px; }
