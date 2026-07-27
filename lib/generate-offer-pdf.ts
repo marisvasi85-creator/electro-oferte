@@ -41,6 +41,12 @@ type GenerateOfferPdfInput = {
   notes: string;
   company: PdfCompany;
   totals: PdfTotals;
+  columns: {
+    unit: boolean;
+    quantity: boolean;
+    unitPrice: boolean;
+    total: boolean;
+  };
 };
 
 const navy = rgb(23 / 255, 34 / 255, 56 / 255);
@@ -114,16 +120,37 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
     }
   };
 
+  const fixedWidth =
+    24 +
+    (input.columns.unit ? 44 : 0) +
+    (input.columns.quantity ? 54 : 0) +
+    (input.columns.unitPrice ? 110 : 0) +
+    (input.columns.total ? 100 : 0);
+  const descriptionWidth = 515 - fixedWidth;
+  const tableColumns = [
+    { key: "index", label: "#", width: 24, align: "left" },
+    { key: "description", label: "Descriere", width: descriptionWidth, align: "left" },
+    ...(input.columns.unit ? [{ key: "unit", label: "UM", width: 44, align: "center" }] : []),
+    ...(input.columns.quantity ? [{ key: "quantity", label: "Cantitate", width: 54, align: "right" }] : []),
+    ...(input.columns.unitPrice ? [{ key: "unitPrice", label: "Preț unitar cu TVA", width: 110, align: "right" }] : []),
+    ...(input.columns.total ? [{ key: "total", label: "Total cu TVA", width: 100, align: "right" }] : []),
+  ];
+
   const drawTableHeader = (target: PDFPage, top: number) => {
     const x = 40;
-    const widths = [24, 211, 36, 44, 100, 100];
-    const labels = ["#", "Descriere", "UM", "Cant.", "Preț unitar cu TVA", "Total cu TVA"];
     target.drawRectangle({ x, y: top - 22, width: 515, height: 22, color: navy });
     let cursor = x;
-    labels.forEach((label, index) => {
-      const size = index >= 4 ? 6.2 : 7;
-      target.drawText(label, { x: cursor + 5, y: top - 14, font: bold, size, color: rgb(1, 1, 1) });
-      cursor += widths[index];
+    tableColumns.forEach((column) => {
+      const size = column.key === "unitPrice" ? 6.2 : 7;
+      if (column.align === "right") {
+        drawRight(target, column.label, cursor + column.width - 5, top - 14, bold, size, rgb(1, 1, 1));
+      } else if (column.align === "center") {
+        const labelWidth = bold.widthOfTextAtSize(column.label, size);
+        target.drawText(column.label, { x: cursor + (column.width - labelWidth) / 2, y: top - 14, font: bold, size, color: rgb(1, 1, 1) });
+      } else {
+        target.drawText(column.label, { x: cursor + 5, y: top - 14, font: bold, size, color: rgb(1, 1, 1) });
+      }
+      cursor += column.width;
     });
     return top - 22;
   };
@@ -140,10 +167,9 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
   titleLines.forEach((line, index) => page.drawText(line, { x: 300, y: 626 - index * 12, font: bold, size: 10, color: navy }));
   y = drawTableHeader(page, 590);
 
-  const widths = [24, 211, 36, 44, 100, 100];
   for (let index = 0; index < input.items.length; index += 1) {
     const item = input.items[index];
-    const descriptionLines = wrapText(item.name, regular, 7.3, widths[1] - 10);
+    const descriptionLines = wrapText(item.name, regular, 7.3, descriptionWidth - 10);
     const rowHeight = Math.max(22, descriptionLines.length * 10 + 8);
     if (y - rowHeight < 100) {
       page = pdf.addPage([595.28, 841.89]);
@@ -152,14 +178,26 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
     }
     if (index % 2 === 1) page.drawRectangle({ x: 40, y: y - rowHeight, width: 515, height: rowHeight, color: rgb(248 / 255, 249 / 255, 251 / 255) });
     page.drawLine({ start: { x: 40, y: y - rowHeight }, end: { x: 555, y: y - rowHeight }, thickness: 0.5, color: light });
-    page.drawText(String(index + 1), { x: 46, y: y - 15, font: regular, size: 7, color: gray });
-    descriptionLines.forEach((line, lineIndex) => page.drawText(line, { x: 69, y: y - 15 - lineIndex * 10, font: regular, size: 7.3, color: navy }));
-    page.drawText(item.unit, { x: 282, y: y - 15, font: regular, size: 7, color: navy });
-    drawRight(page, String(item.quantity), 351, y - 15, regular, 7, navy);
     const unitWithVat = item.unitPrice * (1 + item.vatRate / 100);
     const lineWithVat = item.quantity * unitWithVat;
-    drawRight(page, formatMoney(unitWithVat), 451, y - 15, regular, 7, navy);
-    drawRight(page, formatMoney(lineWithVat), 551, y - 15, bold, 7, navy);
+    let cursor = 40;
+    tableColumns.forEach((column) => {
+      if (column.key === "index") {
+        page.drawText(String(index + 1), { x: cursor + 6, y: y - 15, font: regular, size: 7, color: gray });
+      } else if (column.key === "description") {
+        descriptionLines.forEach((line, lineIndex) => page.drawText(line, { x: cursor + 5, y: y - 15 - lineIndex * 10, font: regular, size: 7.3, color: navy }));
+      } else if (column.key === "unit") {
+        const textWidth = regular.widthOfTextAtSize(item.unit, 7);
+        page.drawText(item.unit, { x: cursor + (column.width - textWidth) / 2, y: y - 15, font: regular, size: 7, color: navy });
+      } else if (column.key === "quantity") {
+        drawRight(page, String(item.quantity), cursor + column.width - 5, y - 15, regular, 7, navy);
+      } else if (column.key === "unitPrice") {
+        drawRight(page, formatMoney(unitWithVat), cursor + column.width - 5, y - 15, regular, 7, navy);
+      } else if (column.key === "total") {
+        drawRight(page, formatMoney(lineWithVat), cursor + column.width - 5, y - 15, bold, 7, navy);
+      }
+      cursor += column.width;
+    });
     y -= rowHeight;
   }
 

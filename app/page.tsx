@@ -59,9 +59,19 @@ type SavedOffer = {
   labor: number;
   discount: number;
   notes: string;
+  pdfColumns?: PdfColumns;
   status: "ciornă" | "trimisă" | "acceptată" | "respinsă";
   updatedAt: string;
 };
+
+type PdfColumns = {
+  unit: boolean;
+  quantity: boolean;
+  unitPrice: boolean;
+  total: boolean;
+};
+
+const defaultPdfColumns: PdfColumns = { unit: true, quantity: true, unitPrice: true, total: true };
 
 const DRAFT_KEY = "electro-oferte:draft:v1";
 
@@ -156,7 +166,7 @@ export default function Home() {
   const [labor, setLabor] = useState(4200);
   const [discount, setDiscount] = useState(0);
   const [notes, setNotes] = useState("Garanție: 24 luni\nValabilitate: 30 zile de la data întocmirii\nOferta nu include costurile de deplasare și cazare.");
-  const [previewMode, setPreviewMode] = useState<"detaliat" | "simplificat">("detaliat");
+  const [pdfColumns, setPdfColumns] = useState<PdfColumns>(defaultPdfColumns);
   const [savedOffers, setSavedOffers] = useState<SavedOffer[]>([]);
   const [currentOfferId, setCurrentOfferId] = useState<string | null>(null);
   const [currentNumber, setCurrentNumber] = useState("OF-2026-013");
@@ -227,12 +237,12 @@ export default function Home() {
     const draft: Partial<SavedOffer> = {
       id: currentOfferId ?? undefined,
       number: currentNumber,
-      client, title, issueDate, validityDays, currency, items, labor, discount, notes,
+      client, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns,
       status: "ciornă",
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [hydrated, currentOfferId, currentNumber, client, title, issueDate, validityDays, currency, items, labor, discount, notes]);
+  }, [hydrated, currentOfferId, currentNumber, client, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns]);
 
   const catalog = useMemo(() => [...customCatalog, ...baseCatalog], [customCatalog, baseCatalog]);
   const totals = useMemo(() => calculateOfferTotals(items, discount, labor), [items, discount, labor]);
@@ -294,7 +304,7 @@ export default function Home() {
     const id = currentOfferId ?? crypto.randomUUID();
     const number = currentOfferId ? currentNumber : nextOfferNumber(savedOffers);
     const offer: SavedOffer = {
-      id, number, client, title, issueDate, validityDays, currency, items, labor, discount, notes,
+      id, number, client, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns,
       status: "ciornă",
       updatedAt: new Date().toISOString(),
     };
@@ -364,6 +374,7 @@ export default function Home() {
     setItems([]);
     setLabor(0);
     setDiscount(0);
+    setPdfColumns(defaultPdfColumns);
     setNotes(`Garanție: ${companySettings.defaultWarranty} luni\nValabilitate: ${companySettings.defaultValidity} zile de la data întocmirii`);
     localStorage.removeItem(DRAFT_KEY);
     setView("editor");
@@ -388,6 +399,7 @@ export default function Home() {
     setLabor(offer.labor);
     setDiscount(offer.discount);
     setNotes(offer.notes);
+    setPdfColumns(offer.pdfColumns ?? defaultPdfColumns);
     setView("editor");
   }
 
@@ -435,6 +447,7 @@ export default function Home() {
         notes,
         company: companySettings,
         totals,
+        columns: pdfColumns,
       });
       setSaveMessage("PDF descărcat");
     } catch (error) {
@@ -599,15 +612,31 @@ export default function Home() {
 
               <aside className="preview-card">
                 <div className="preview-toolbar">
-                  <strong>Previzualizare</strong>
-                  <div className="segmented"><button className={previewMode === "detaliat" ? "selected" : ""} onClick={() => setPreviewMode("detaliat")}>Detaliat</button><button className={previewMode === "simplificat" ? "selected" : ""} onClick={() => setPreviewMode("simplificat")}>Simplificat</button></div>
+                  <div><strong>Coloane în ofertă</strong><small>Bifează doar informațiile pe care vrei să le vadă clientul.</small></div>
+                  <div className="column-options">
+                    {([
+                      ["unit", "UM"],
+                      ["quantity", "Cantitate"],
+                      ["unitPrice", "Preț unitar"],
+                      ["total", "Total"],
+                    ] as Array<[keyof PdfColumns, string]>).map(([key, label]) => (
+                      <label key={key}>
+                        <input
+                          type="checkbox"
+                          checked={pdfColumns[key]}
+                          onChange={(event) => setPdfColumns((current) => ({ ...current, [key]: event.target.checked }))}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <article className="paper">
                   <div className="paper-header"><div><strong>{companySettings.name.toUpperCase()}</strong><span>CUI {companySettings.taxId} · {companySettings.registrationNumber}</span><span>{companySettings.address}</span><span>Tel. {companySettings.phone}{companySettings.email ? ` · ${companySettings.email}` : ""}</span>{companySettings.iban && <span>IBAN {companySettings.iban}{companySettings.bank ? ` · ${companySettings.bank}` : ""}</span>}</div><Image className="paper-logo-image" src="/brand/electric-smart-logo.jpg" alt="Electric Smart" width={76} height={65} priority /></div>
                   <div className="paper-title"><small>{currentNumber} · {issueDate.split("-").reverse().join(".")}</small><h3>{title || "Titlul lucrării"}</h3><p>Beneficiar: <strong>{client || "Beneficiar"}</strong></p></div>
                   <table className="paper-table">
-                    <thead><tr><th>#</th><th>Descriere</th><th>UM</th><th>Cant.</th>{previewMode === "detaliat" && <><th>Preț cu TVA</th><th>Total cu TVA</th></>}</tr></thead>
-                    <tbody>{items.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.name}</td><td>{item.unit}</td><td>{item.quantity}</td>{previewMode === "detaliat" && <><td>{money.format(item.unitPrice * (1 + item.vatRate / 100))}</td><td>{money.format(item.quantity * item.unitPrice * (1 + item.vatRate / 100))}</td></>}</tr>)}</tbody>
+                    <thead><tr><th>#</th><th>Descriere</th>{pdfColumns.unit && <th className="center">UM</th>}{pdfColumns.quantity && <th className="numeric">Cantitate</th>}{pdfColumns.unitPrice && <th className="numeric">Preț unitar cu TVA</th>}{pdfColumns.total && <th className="numeric">Total cu TVA</th>}</tr></thead>
+                    <tbody>{items.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.name}</td>{pdfColumns.unit && <td className="center">{item.unit}</td>}{pdfColumns.quantity && <td className="numeric">{item.quantity}</td>}{pdfColumns.unitPrice && <td className="numeric">{money.format(item.unitPrice * (1 + item.vatRate / 100))}</td>}{pdfColumns.total && <td className="numeric">{money.format(item.quantity * item.unitPrice * (1 + item.vatRate / 100))}</td>}</tr>)}</tbody>
                   </table>
                   <div className="paper-summary"><p><span>Materiale cu TVA</span><strong>{money.format(totals.materials)} {currency === "RON" ? "lei" : "EUR"}</strong></p>{totals.services > 0 && <p><span>Servicii cu TVA</span><strong>{money.format(totals.services)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}<p><span>Manoperă globală</span><strong>{money.format(labor)} {currency === "RON" ? "lei" : "EUR"}</strong></p><p><span>TOTAL GENERAL</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "EUR"}</strong></p></div>
                   <div className="paper-notes"><strong>Condiții</strong>{notes.split("\n").filter(Boolean).map((line) => <p key={line}>{line}</p>)}</div>
