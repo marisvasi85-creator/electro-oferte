@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
 import {
@@ -11,6 +11,7 @@ import {
 } from "./management-panels";
 import { AuthScreen } from "./auth-screen";
 import { CatalogManager, type ManagedCatalogItem } from "./catalog-manager";
+import { firstPopulatedSheet, parseLegacyOffer } from "./excel-import";
 import { supabase } from "../lib/supabase";
 import {
   addRemoteCatalogItems,
@@ -235,6 +236,7 @@ export default function Home() {
   const [clients, setClients] = useState<ClientRecord[]>(initialClients);
   const [companySettings, setCompanySettings] = useState<CompanySettings>(initialCompanySettings);
   const [offerSearch, setOfferSearch] = useState("");
+  const legacyOfferInput = useRef<HTMLInputElement>(null);
   const [savedSignature, setSavedSignature] = useState("");
   const currentSignature = useMemo(() => offerSignature({
     client, clientDetails, title, issueDate, validityDays, currency, items, labor, laborOptions,
@@ -473,6 +475,41 @@ export default function Home() {
       setSaveMessage(`Salvat în Supabase la ${new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" })}${additions.length ? ` · adăugat: ${additions.join(", ")}` : ""}`);
     } catch (error) {
       setSaveMessage(`Salvarea a eșuat: ${(error as Error).message}`);
+    }
+  }
+
+  async function importLegacyOffer(file: File) {
+    if (isDirty && !window.confirm("Oferta curentă are modificări nesalvate. Vrei să o înlocuiești cu oferta importată?")) {
+      if (legacyOfferInput.current) legacyOfferInput.current.value = "";
+      return;
+    }
+    setSaveMessage("Se citește oferta Excel…");
+    try {
+      const readXlsxFile = (await import("read-excel-file/browser")).default;
+      const rows = firstPopulatedSheet(await readXlsxFile(file));
+      const imported = parseLegacyOffer(rows);
+      setCurrentOfferId(null);
+      setCurrentNumber(nextOfferNumber(savedOffers));
+      setClient(imported.client);
+      setClientDetails(emptyClientDetails);
+      setTitle(imported.title);
+      setIssueDate(imported.issueDate);
+      setValidityDays(imported.validityDays);
+      setCurrency(imported.currency);
+      setItems(imported.items);
+      setLabor(imported.labor);
+      setLaborOptions(defaultLaborOptions);
+      setDiscount(imported.discount);
+      setCurrentStatus("ciornă");
+      setPdfColumns(defaultPdfColumns);
+      setNotes(imported.notes || `Importată din ${file.name}. Verifică valorile înainte de salvare.`);
+      setSavedSignature("");
+      setView("editor");
+      setSaveMessage(`Previzualizare importată din ${file.name} · verifică cele ${imported.items.length} poziții și salvează oferta`);
+    } catch (error) {
+      setSaveMessage(`Importul ofertei a eșuat: ${(error as Error).message}`);
+    } finally {
+      if (legacyOfferInput.current) legacyOfferInput.current.value = "";
     }
   }
 
@@ -741,7 +778,11 @@ export default function Home() {
           <>
             <header className="topbar">
               <div><span className="eyebrow">ELECTRICSMART</span><h1>Oferte</h1><p>{savedOffers.length} salvate și sincronizate</p></div>
-              <button className="primary" onClick={newOffer}>＋ Ofertă nouă</button>
+              <div className="top-actions">
+                <input ref={legacyOfferInput} hidden type="file" accept=".xlsx,.xls" onChange={(event) => event.target.files?.[0] && importLegacyOffer(event.target.files[0])} />
+                <button className="secondary" onClick={() => legacyOfferInput.current?.click()}>Importă ofertă veche</button>
+                <button className="primary" onClick={newOffer}>＋ Ofertă nouă</button>
+              </div>
             </header>
             <section className="offers-page">
               <div className="local-notice"><strong>Versiune beta sincronizată</strong><span>Ofertele sunt salvate în proiectul Supabase Oferte și sunt disponibile după autentificare.</span></div>

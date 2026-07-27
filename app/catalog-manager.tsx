@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { firstPopulatedSheet, parseCatalogRows } from "./excel-import";
 
 export type ManagedCatalogItem = {
   id: string;
@@ -25,44 +26,6 @@ type Props = {
   onImport: (items: ManagedCatalogItem[]) => Promise<void>;
   onBack: () => void;
 };
-
-function normalizeHeader(value: unknown) {
-  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function valueFor(row: unknown[], headers: string[], names: string[]) {
-  const index = headers.findIndex((header) => names.includes(header));
-  return index >= 0 ? row[index] : "";
-}
-
-function rowsToItems(rows: unknown[][]): ManagedCatalogItem[] {
-  if (rows.length < 2) return [];
-  const headers = rows[0].map(normalizeHeader);
-  return rows.slice(1).map((row) => {
-    const name = String(valueFor(row, headers, ["denumire", "nume", "name", "material", "articol"]) ?? "").trim();
-    const rawKind = normalizeHeader(valueFor(row, headers, ["tip", "kind", "tiparticol"]));
-    const kind: ManagedCatalogItem["kind"] = rawKind.includes("manoper") || rawKind.includes("servici")
-      ? "labor"
-      : rawKind.includes("chelt") || rawKind.includes("cost")
-        ? "expense"
-        : "material";
-    return {
-      id: crypto.randomUUID(),
-      code: String(valueFor(row, headers, ["cod", "code", "sku"]) ?? "").trim(),
-      name,
-      category: String(valueFor(row, headers, ["categorie", "category"]) || (kind === "labor" ? "Servicii și manoperă" : "Materiale importate")).trim(),
-      subcategory: String(valueFor(row, headers, ["subcategorie", "subcategory"]) ?? "").trim(),
-      kind,
-      unit: String(valueFor(row, headers, ["um", "unitate", "unit"]) || "buc").trim(),
-      unitPrice: Number(valueFor(row, headers, ["pret", "pretunitar", "unitprice", "price"]) || 0),
-      currency: String(valueFor(row, headers, ["moneda", "currency"]) || "RON").toUpperCase() === "EUR" ? "EUR" : "RON",
-      vatRate: Number(valueFor(row, headers, ["tva", "vatrate", "vat"]) || 21),
-      specifications: String(valueFor(row, headers, ["specificatii", "specificatie", "specifications", "descriere"]) ?? "").trim(),
-      sourceType: "import Excel",
-      active: true,
-    };
-  }).filter((item) => item.name);
-}
 
 function parseCsv(text: string) {
   const separator = text.split("\n")[0]?.includes(";") ? ";" : ",";
@@ -137,9 +100,9 @@ export function CatalogManager({ items, onSave, onDelete, onImport, onBack }: Pr
         rows = parseCsv(await file.text());
       } else {
         const readXlsxFile = (await import("read-excel-file/browser")).default;
-        rows = await readXlsxFile(file) as unknown as unknown[][];
+        rows = firstPopulatedSheet(await readXlsxFile(file));
       }
-      const imported = rowsToItems(rows);
+      const imported = parseCatalogRows(rows) as ManagedCatalogItem[];
       if (!imported.length) throw new Error("Nu am găsit coloana Denumire/Nume și articole valide.");
       await onImport(imported);
       setMessage(`${imported.length} articole importate.`);
@@ -149,6 +112,13 @@ export function CatalogManager({ items, onSave, onDelete, onImport, onBack }: Pr
       setBusy(false);
       if (fileInput.current) fileInput.current.value = "";
     }
+  }
+
+  function downloadTemplate() {
+    const anchor = document.createElement("a");
+    anchor.href = "/model-import-catalog.xlsx";
+    anchor.download = "model-import-catalog.xlsx";
+    anchor.click();
   }
 
   async function toggleActive(item: ManagedCatalogItem) {
@@ -182,6 +152,7 @@ export function CatalogManager({ items, onSave, onDelete, onImport, onBack }: Pr
         <div><button className="back" onClick={onBack}>← Înapoi</button><h1>Catalog</h1><p>{items.length} articole · {items.filter((item) => item.active).length} active</p></div>
         <div className="top-actions">
           <input ref={fileInput} hidden type="file" accept=".xlsx,.xls,.csv" onChange={(event) => event.target.files?.[0] && importFile(event.target.files[0])} />
+          <button className="secondary" onClick={downloadTemplate}>Descarcă model</button>
           <button className="secondary" disabled={busy} onClick={() => fileInput.current?.click()}>Importă Excel / CSV</button>
           <button className="primary" onClick={newItem}>＋ Articol nou</button>
         </div>
