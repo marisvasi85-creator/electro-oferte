@@ -100,7 +100,7 @@ function drawRight(page: PDFPage, text: string, right: number, y: number, font: 
   page.drawText(text, { x: right - font.widthOfTextAtSize(text, size), y, font, size, color });
 }
 
-export async function generateOfferPdf(input: GenerateOfferPdfInput) {
+export async function createOfferPdf(input: GenerateOfferPdfInput) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const [regularBytes, boldBytes, logoBytes] = await Promise.all([
@@ -295,10 +295,15 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
   const bytes = await pdf.save();
   const safeClient = (input.client || "client").replace(/[^a-zA-Z0-9ăâîșțĂÂÎȘȚ -]/g, "").trim().replace(/\s+/g, "-");
   const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
+  return { blob, filename: `${input.number}-${safeClient}.pdf` };
+}
+
+export async function generateOfferPdf(input: GenerateOfferPdfInput) {
+  const { blob, filename } = await createOfferPdf(input);
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${input.number}-${safeClient}.pdf`;
+  anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
 }

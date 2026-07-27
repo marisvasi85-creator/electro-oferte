@@ -228,6 +228,8 @@ export default function Home() {
   const [currentNumber, setCurrentNumber] = useState("OF-2026-013");
   const [saveMessage, setSaveMessage] = useState("Ciornă locală");
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [excelBusy, setExcelBusy] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [baseCatalog, setBaseCatalog] = useState<CatalogItem[]>([]);
   const [customCatalog, setCustomCatalog] = useState<CatalogItem[]>([]);
@@ -648,29 +650,32 @@ export default function Home() {
     }
   }
 
+  function documentInput(offer: SavedOffer) {
+    return {
+      number: offer.number,
+      client: offer.client,
+      clientDetails: offer.clientDetails ?? emptyClientDetails,
+      title: offer.title,
+      issueDate: offer.issueDate,
+      validityDays: offer.validityDays,
+      currency: offer.currency,
+      items: offer.items,
+      labor: offer.labor,
+      laborOptions: offer.laborOptions ?? defaultLaborOptions,
+      discount: offer.discount,
+      notes: offer.notes,
+      company: companySettings,
+      totals: calculateOfferTotals(offer.items, offer.discount, offer.labor, offer.laborOptions),
+      columns: offer.pdfColumns ?? defaultPdfColumns,
+    };
+  }
+
   async function generatePdfForOffer(offer: SavedOffer) {
     setPdfBusy(true);
     setSaveMessage("Se generează PDF-ul…");
     try {
       const { generateOfferPdf } = await import("../lib/generate-offer-pdf");
-      const offerTotals = calculateOfferTotals(offer.items, offer.discount, offer.labor, offer.laborOptions);
-      await generateOfferPdf({
-        number: offer.number,
-        client: offer.client,
-        clientDetails: offer.clientDetails ?? emptyClientDetails,
-        title: offer.title,
-        issueDate: offer.issueDate,
-        validityDays: offer.validityDays,
-        currency: offer.currency,
-        items: offer.items,
-        labor: offer.labor,
-        laborOptions: offer.laborOptions ?? defaultLaborOptions,
-        discount: offer.discount,
-        notes: offer.notes,
-        company: companySettings,
-        totals: offerTotals,
-        columns: offer.pdfColumns ?? defaultPdfColumns,
-      });
+      await generateOfferPdf(documentInput(offer));
       setSaveMessage("PDF descărcat");
     } catch (error) {
       setSaveMessage(`PDF-ul nu a putut fi generat: ${(error as Error).message}`);
@@ -679,8 +684,100 @@ export default function Home() {
     }
   }
 
+  async function generateExcelForOffer(offer: SavedOffer) {
+    setExcelBusy(true);
+    setSaveMessage("Se generează fișierul Excel…");
+    try {
+      const { generateOfferXlsx } = await import("../lib/generate-offer-xlsx");
+      await generateOfferXlsx(documentInput(offer));
+      setSaveMessage("Excel descărcat");
+    } catch (error) {
+      setSaveMessage(`Fișierul Excel nu a putut fi generat: ${(error as Error).message}`);
+    } finally {
+      setExcelBusy(false);
+    }
+  }
+
+  async function shareOffer(offer: SavedOffer) {
+    setShareBusy(true);
+    setSaveMessage("Se pregătește oferta pentru partajare…");
+    try {
+      const { createOfferPdf } = await import("../lib/generate-offer-pdf");
+      const { blob, filename } = await createOfferPdf(documentInput(offer));
+      const file = new File([blob], filename, { type: "application/pdf" });
+      const shareData = {
+        title: `${offer.number} - ${offer.client}`,
+        text: `Bună ziua, vă trimit oferta ${offer.number} pentru ${offer.title || "lucrarea solicitată"}.`,
+        files: [file],
+      };
+      if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+        await navigator.share(shareData);
+        setSaveMessage("Oferta a fost trimisă către aplicația aleasă");
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const download = document.createElement("a");
+      download.href = url;
+      download.download = filename;
+      download.click();
+      URL.revokeObjectURL(url);
+      const message = encodeURIComponent(`${shareData.text} PDF-ul a fost descărcat și poate fi atașat conversației.`);
+      window.open(`https://wa.me/?text=${message}`, "_blank", "noopener,noreferrer");
+      setSaveMessage("PDF descărcat și WhatsApp deschis");
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") {
+        setSaveMessage(`Partajarea a eșuat: ${(error as Error).message}`);
+      }
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
   async function downloadPdf() {
     await generatePdfForOffer({
+      id: currentOfferId ?? "",
+      number: currentNumber,
+      client,
+      clientDetails,
+      title,
+      issueDate,
+      validityDays,
+      currency,
+      items,
+      labor,
+      laborOptions,
+      discount,
+      notes,
+      pdfColumns,
+      status: currentStatus,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function downloadExcel() {
+    await generateExcelForOffer({
+      id: currentOfferId ?? "",
+      number: currentNumber,
+      client,
+      clientDetails,
+      title,
+      issueDate,
+      validityDays,
+      currency,
+      items,
+      labor,
+      laborOptions,
+      discount,
+      notes,
+      pdfColumns,
+      status: currentStatus,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function shareCurrentOffer() {
+    await shareOffer({
       id: currentOfferId ?? "",
       number: currentNumber,
       client,
@@ -804,7 +901,7 @@ export default function Home() {
                         <button className="offer-main" onClick={() => openOffer(offer)}><strong>{offer.client || "Beneficiar necompletat"}</strong><span>{offer.title || "Lucrare fără titlu"} · {money.format(offerTotal)} {offer.currency === "RON" ? "lei" : "EUR"}</span></button>
                         <span className="offer-date">{new Date(offer.updatedAt).toLocaleDateString("ro-RO")}</span>
                         <select className={`status-select ${offer.status}`} value={offer.status} onChange={(event) => changeOfferStatus(offer.id, event.target.value as OfferStatus)} aria-label={`Status ${offer.number}`}>{offerStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select>
-                        <div className="row-actions"><button onClick={() => generatePdfForOffer(offer)} title="Descarcă PDF" disabled={pdfBusy}>↓</button><button onClick={() => duplicateOffer(offer)} title="Duplică">⧉</button><button onClick={() => deleteOffer(offer.id)} title="Șterge">×</button></div>
+                        <div className="row-actions"><button onClick={() => generatePdfForOffer(offer)} title="Descarcă PDF" disabled={pdfBusy}>↓</button><button className="xlsx-action" onClick={() => generateExcelForOffer(offer)} title="Descarcă Excel" disabled={excelBusy}>XLS</button><button onClick={() => shareOffer(offer)} title="Partajează" disabled={shareBusy}>↗</button><button onClick={() => duplicateOffer(offer)} title="Duplică">⧉</button><button onClick={() => deleteOffer(offer.id)} title="Șterge">×</button></div>
                       </div>
                     );
                   })}
@@ -821,6 +918,12 @@ export default function Home() {
                 <p className={`save-state ${isDirty ? "dirty" : "saved"}`}><span>{isDirty ? "● Modificări nesalvate" : "✓ Salvat"}</span> · {saveMessage} · {currentNumber}</p>
               </div>
               <div className="top-actions">
+                <button className="secondary" onClick={shareCurrentOffer} disabled={shareBusy}>
+                  {shareBusy ? "Se pregătește…" : "Partajează"}
+                </button>
+                <button className="secondary" onClick={downloadExcel} disabled={excelBusy}>
+                  {excelBusy ? "Se generează Excel…" : "Descarcă Excel"}
+                </button>
                 <button className="secondary" onClick={downloadPdf} disabled={pdfBusy}>
                   {pdfBusy ? "Se generează PDF…" : "Descarcă PDF"}
                 </button>
