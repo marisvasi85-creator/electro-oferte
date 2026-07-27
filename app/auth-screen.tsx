@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
 
-const BETA_EMAIL = "teomaris27@gmail.com";
+const BETA_EMAIL = "marisvasi85@gmail.com";
 
 export function AuthScreen() {
   const [mode, setMode] = useState<"login" | "signup">("login");

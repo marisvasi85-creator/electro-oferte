@@ -185,7 +185,7 @@ export default function Home() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    loadBetaData(user.id, user.email ?? "teomaris27@gmail.com")
+    loadBetaData(user.id, user.email ?? "marisvasi85@gmail.com")
       .then((data) => {
         if (cancelled) return;
         setSavedOffers(data.offers);
