@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: ["/", "/termeni", "/confidentialitate"],
       disallow: ["/recovery"],
     },
-    sitemap: "https://electro-oferte.vercel.app/sitemap.xml",
+    sitemap: "https://oferte.frizeo.ro/sitemap.xml",
   };
 }
