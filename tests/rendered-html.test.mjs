@@ -64,6 +64,9 @@ test("ships Romanian validation, security headers and legal pages", async () => 
   assert.match(nextConfig, /X-Frame-Options/);
   assert.match(termeni, /Termeni și condiții/);
   assert.match(privacy, /GDPR/);
+  assert.match(privacy, /marisvasi85@gmail\.com/);
+  assert.match(termeni, /marisvasi85@gmail\.com/);
   assert.match(robots, /disallow: \["\/recovery"\]/);
+  assert.match(sitemap, /electro-oferte\.vercel\.app/);
   assert.match(sitemap, /\/confidentialitate/);
 });

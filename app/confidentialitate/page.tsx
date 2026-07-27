@@ -17,7 +17,7 @@ export default function ConfidentialitatePage() {
       <h2>1. Operator</h2>
       <p>
         Operatorul datelor pentru platformă este Frizeo Oferte. Contact:{" "}
-        <a href="mailto:contact@frizeo.ro">contact@frizeo.ro</a>.
+        <a href="mailto:marisvasi85@gmail.com">marisvasi85@gmail.com</a>.
       </p>
       <h2>2. Ce date colectăm</h2>
       <ul>
@@ -54,7 +54,7 @@ export default function ConfidentialitatePage() {
       <h2>8. Contact DPO / confidențialitate</h2>
       <p>
         Pentru exercitarea drepturilor GDPR, scrie la{" "}
-        <a href="mailto:contact@frizeo.ro">contact@frizeo.ro</a>.
+        <a href="mailto:marisvasi85@gmail.com">marisvasi85@gmail.com</a>.
       </p>
     </LegalPage>
   );

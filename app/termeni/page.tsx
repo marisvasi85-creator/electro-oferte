@@ -45,7 +45,7 @@ export default function TermeniPage() {
       <h2>6. Contact</h2>
       <p>
         Pentru întrebări legate de termeni, scrie la{" "}
-        <a href="mailto:contact@frizeo.ro">contact@frizeo.ro</a>.
+        <a href="mailto:marisvasi85@gmail.com">marisvasi85@gmail.com</a>.
       </p>
     </LegalPage>
   );
