@@ -96,12 +96,13 @@ const emptyClientDetails: OfferClientDetails = { taxId: "", address: "", contact
 type PdfColumns = {
   unit: boolean;
   quantity: boolean;
+  unitPriceWithoutVat: boolean;
   unitPrice: boolean;
   total: boolean;
   showDiscount: boolean;
 };
 
-const defaultPdfColumns: PdfColumns = { unit: true, quantity: true, unitPrice: true, total: true, showDiscount: true };
+const defaultPdfColumns: PdfColumns = { unit: true, quantity: true, unitPriceWithoutVat: false, unitPrice: true, total: true, showDiscount: true };
 
 const DRAFT_KEY = "electro-oferte:draft:v1";
 
@@ -934,7 +935,8 @@ export default function Home() {
                     {([
                       ["unit", "UM"],
                       ["quantity", "Cantitate"],
-                      ["unitPrice", "Preț unitar"],
+                      ["unitPriceWithoutVat", "Preț unitar fără TVA"],
+                      ["unitPrice", "Preț unitar cu TVA"],
                       ["total", "Total"],
                     ] as Array<[keyof PdfColumns, string]>).map(([key, label]) => (
                       <label key={key}>
@@ -952,8 +954,8 @@ export default function Home() {
                   <div className="paper-header"><div><strong>{companySettings.name.toUpperCase()}</strong><span>CUI {companySettings.taxId} · {companySettings.registrationNumber}</span><span>{companySettings.address}</span><span>Tel. {companySettings.phone}{companySettings.email ? ` · ${companySettings.email}` : ""}</span>{companySettings.iban && <span>IBAN {companySettings.iban}{companySettings.bank ? ` · ${companySettings.bank}` : ""}</span>}</div><Image className="paper-logo-image" src="/brand/electric-smart-logo.jpg" alt="Electric Smart" width={76} height={65} priority /></div>
                   <div className="paper-title"><small>{currentNumber} · {issueDate.split("-").reverse().join(".")}</small><h3>{title || "Titlul lucrării"}</h3><p>Beneficiar: <strong>{client || "Beneficiar"}</strong></p>{Object.values(clientDetails).some(Boolean) && <div className="paper-client-details">{clientDetails.taxId && <span>CUI/CNP: {clientDetails.taxId}</span>}{clientDetails.address && <span>{clientDetails.address}</span>}{clientDetails.contactPerson && <span>Contact: {clientDetails.contactPerson}</span>}{(clientDetails.phone || clientDetails.email) && <span>{[clientDetails.phone, clientDetails.email].filter(Boolean).join(" · ")}</span>}</div>}</div>
                   <table className="paper-table">
-                    <thead><tr><th>#</th><th>Descriere</th>{pdfColumns.unit && <th className="center">UM</th>}{pdfColumns.quantity && <th className="numeric">Cantitate</th>}{pdfColumns.unitPrice && <th className="numeric">Preț unitar cu TVA</th>}{pdfColumns.total && <th className="numeric">Total cu TVA</th>}</tr></thead>
-                    <tbody>{items.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.name}</td>{pdfColumns.unit && <td className="center">{item.unit}</td>}{pdfColumns.quantity && <td className="numeric">{item.quantity}</td>}{pdfColumns.unitPrice && <td className="numeric">{money.format(item.unitPrice * (1 + item.vatRate / 100))}</td>}{pdfColumns.total && <td className="numeric">{money.format(item.quantity * item.unitPrice * (1 + item.vatRate / 100))}</td>}</tr>)}</tbody>
+                    <thead><tr><th>#</th><th>Descriere</th>{pdfColumns.unit && <th className="center">UM</th>}{pdfColumns.quantity && <th className="numeric">Cantitate</th>}{pdfColumns.unitPriceWithoutVat && <th className="numeric">Preț unitar fără TVA</th>}{pdfColumns.unitPrice && <th className="numeric">Preț unitar cu TVA</th>}{pdfColumns.total && <th className="numeric">Total cu TVA</th>}</tr></thead>
+                    <tbody>{items.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.name}</td>{pdfColumns.unit && <td className="center">{item.unit}</td>}{pdfColumns.quantity && <td className="numeric">{item.quantity}</td>}{pdfColumns.unitPriceWithoutVat && <td className="numeric">{money.format(item.unitPrice)}</td>}{pdfColumns.unitPrice && <td className="numeric">{money.format(item.unitPrice * (1 + item.vatRate / 100))}</td>}{pdfColumns.total && <td className="numeric">{money.format(item.quantity * item.unitPrice * (1 + item.vatRate / 100))}</td>}</tr>)}</tbody>
                   </table>
                   <div className="paper-summary"><p><span>{discount > 0 && !pdfColumns.showDiscount ? "Materiale nete fără TVA" : "Materiale fără TVA"}</span><strong>{money.format(discount > 0 && !pdfColumns.showDiscount ? totals.subtotal - totals.discountAmount : totals.subtotal)} {currency === "RON" ? "lei" : "EUR"}</strong></p>{discount > 0 && pdfColumns.showDiscount && <p className="discount"><span>Discount aplicat ({discount}%)</span><strong>-{money.format(totals.discountAmount)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}{totals.servicesSubtotal > 0 && <p><span>Servicii fără TVA</span><strong>{money.format(totals.servicesSubtotal)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}<p><span>TVA total</span><strong>{money.format(totals.vat)} {currency === "RON" ? "lei" : "EUR"}</strong></p>{labor > 0 && laborOptions.showLine && <p><span>Manoperă{laborOptions.vatRate > 0 ? " cu TVA" : ""}</span><strong>{money.format(totals.laborTotal)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}<p><span>TOTAL GENERAL</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "EUR"}</strong></p></div>
                   <div className="paper-notes"><strong>Condiții</strong>{notes.split("\n").filter(Boolean).map((line) => <p key={line}>{line}</p>)}</div>

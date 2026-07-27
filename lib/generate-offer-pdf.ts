@@ -56,6 +56,7 @@ type GenerateOfferPdfInput = {
   columns: {
     unit: boolean;
     quantity: boolean;
+    unitPriceWithoutVat: boolean;
     unitPrice: boolean;
     total: boolean;
     showDiscount: boolean;
@@ -135,18 +136,20 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
 
   const fixedWidth =
     24 +
-    (input.columns.unit ? 44 : 0) +
-    (input.columns.quantity ? 54 : 0) +
-    (input.columns.unitPrice ? 110 : 0) +
-    (input.columns.total ? 100 : 0);
+    (input.columns.unit ? 36 : 0) +
+    (input.columns.quantity ? 48 : 0) +
+    (input.columns.unitPriceWithoutVat ? 86 : 0) +
+    (input.columns.unitPrice ? 86 : 0) +
+    (input.columns.total ? 90 : 0);
   const descriptionWidth = 515 - fixedWidth;
   const tableColumns = [
     { key: "index", label: "#", width: 24, align: "left" },
     { key: "description", label: "Descriere", width: descriptionWidth, align: "left" },
-    ...(input.columns.unit ? [{ key: "unit", label: "UM", width: 44, align: "center" }] : []),
-    ...(input.columns.quantity ? [{ key: "quantity", label: "Cantitate", width: 54, align: "right" }] : []),
-    ...(input.columns.unitPrice ? [{ key: "unitPrice", label: "Preț unitar cu TVA", width: 110, align: "right" }] : []),
-    ...(input.columns.total ? [{ key: "total", label: "Total cu TVA", width: 100, align: "right" }] : []),
+    ...(input.columns.unit ? [{ key: "unit", label: "UM", width: 36, align: "center" }] : []),
+    ...(input.columns.quantity ? [{ key: "quantity", label: "Cantitate", width: 48, align: "right" }] : []),
+    ...(input.columns.unitPriceWithoutVat ? [{ key: "unitPriceWithoutVat", label: "Preț unitar fără TVA", width: 86, align: "right" }] : []),
+    ...(input.columns.unitPrice ? [{ key: "unitPrice", label: "Preț unitar cu TVA", width: 86, align: "right" }] : []),
+    ...(input.columns.total ? [{ key: "total", label: "Total cu TVA", width: 90, align: "right" }] : []),
   ];
 
   const drawTableHeader = (target: PDFPage, top: number) => {
@@ -154,7 +157,7 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
     target.drawRectangle({ x, y: top - 22, width: 515, height: 22, color: navy });
     let cursor = x;
     tableColumns.forEach((column) => {
-      const size = column.key === "unitPrice" ? 6.2 : 7;
+      const size = column.key === "unitPrice" || column.key === "unitPriceWithoutVat" ? 5.4 : 7;
       if (column.align === "right") {
         drawRight(target, column.label, cursor + column.width - 5, top - 14, bold, size, rgb(1, 1, 1));
       } else if (column.align === "center") {
@@ -194,7 +197,7 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
 
   for (let index = 0; index < input.items.length; index += 1) {
     const item = input.items[index];
-    const descriptionLines = wrapText(item.name, regular, 7.3, descriptionWidth - 10);
+    const descriptionLines = wrapText(item.name, regular, 7.3, descriptionWidth - 18);
     const rowHeight = Math.max(22, descriptionLines.length * 10 + 8);
     if (y - rowHeight < 100) {
       page = pdf.addPage([595.28, 841.89]);
@@ -216,6 +219,8 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
         page.drawText(item.unit, { x: cursor + (column.width - textWidth) / 2, y: y - 15, font: regular, size: 7, color: navy });
       } else if (column.key === "quantity") {
         drawRight(page, String(item.quantity), cursor + column.width - 5, y - 15, regular, 7, navy);
+      } else if (column.key === "unitPriceWithoutVat") {
+        drawRight(page, formatMoney(item.unitPrice), cursor + column.width - 5, y - 15, regular, 7, navy);
       } else if (column.key === "unitPrice") {
         drawRight(page, formatMoney(unitWithVat), cursor + column.width - 5, y - 15, regular, 7, navy);
       } else if (column.key === "total") {

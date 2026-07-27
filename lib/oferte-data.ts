@@ -75,6 +75,7 @@ export type RemoteOffer = {
   pdfColumns?: {
     unit: boolean;
     quantity: boolean;
+    unitPriceWithoutVat: boolean;
     unitPrice: boolean;
     total: boolean;
     showDiscount: boolean;
@@ -216,6 +217,7 @@ export async function loadBetaData(userId: string, email: string) {
     pdfColumns: {
       unit: row.pdf_columns?.unit !== false,
       quantity: row.pdf_columns?.quantity !== false,
+      unitPriceWithoutVat: row.pdf_columns?.unitPriceWithoutVat === true,
       unitPrice: row.pdf_columns?.unitPrice !== false,
       total: row.pdf_columns?.total !== false,
       showDiscount: row.pdf_columns?.showDiscount !== false,
@@ -304,7 +306,7 @@ export async function saveRemoteOffer(
     labor_options: offer.laborOptions ?? { vatRate: 0, showLine: true },
     discount: offer.discount,
     notes: offer.notes,
-    pdf_columns: offer.pdfColumns ?? { unit: true, quantity: true, unitPrice: true, total: true, showDiscount: true },
+    pdf_columns: offer.pdfColumns ?? { unit: true, quantity: true, unitPriceWithoutVat: false, unitPrice: true, total: true, showDiscount: true },
     status: offer.status,
     updated_at: offer.updatedAt,
   }).select("id").single();
