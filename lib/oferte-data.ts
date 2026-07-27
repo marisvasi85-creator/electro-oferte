@@ -323,6 +323,17 @@ export async function deleteRemoteOffer(id: string) {
   if (result.error) throw result.error;
 }
 
+export async function updateRemoteOfferStatus(id: string, status: RemoteOffer["status"]) {
+  const result = await supabase
+    .from("offers")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id, status")
+    .single();
+  if (result.error) throw result.error;
+  return result.data;
+}
+
 export async function addRemoteCatalogItems(userId: string, items: RemoteCatalogItem[]) {
   if (!items.length) return [] as RemoteCatalogItem[];
   const result = await supabase.from("catalog_items").insert(items.map((item) => ({

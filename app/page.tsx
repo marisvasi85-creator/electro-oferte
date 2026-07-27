@@ -19,6 +19,7 @@ import {
   saveRemoteOffer,
   syncClients,
   syncCompany,
+  updateRemoteOfferStatus,
 } from "../lib/oferte-data";
 
 type OfferItem = {
@@ -64,6 +65,9 @@ type SavedOffer = {
   status: "ciornă" | "trimisă" | "acceptată" | "respinsă";
   updatedAt: string;
 };
+
+type OfferStatus = SavedOffer["status"];
+const offerStatuses: OfferStatus[] = ["ciornă", "trimisă", "acceptată", "respinsă"];
 
 type OfferClientDetails = {
   taxId: string;
@@ -179,6 +183,7 @@ export default function Home() {
   const [labor, setLabor] = useState(4200);
   const [discount, setDiscount] = useState(0);
   const [notes, setNotes] = useState("Garanție: 24 luni\nValabilitate: 30 zile de la data întocmirii\nOferta nu include costurile de deplasare și cazare.");
+  const [currentStatus, setCurrentStatus] = useState<OfferStatus>("ciornă");
   const [pdfColumns, setPdfColumns] = useState<PdfColumns>(defaultPdfColumns);
   const [savedOffers, setSavedOffers] = useState<SavedOffer[]>([]);
   const [currentOfferId, setCurrentOfferId] = useState<string | null>(null);
@@ -193,6 +198,7 @@ export default function Home() {
   const [catalogCategory, setCatalogCategory] = useState("Toate");
   const [clients, setClients] = useState<ClientRecord[]>(initialClients);
   const [companySettings, setCompanySettings] = useState<CompanySettings>(initialCompanySettings);
+  const [offerSearch, setOfferSearch] = useState("");
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -251,11 +257,11 @@ export default function Home() {
       id: currentOfferId ?? undefined,
       number: currentNumber,
       client, clientDetails, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns,
-      status: "ciornă",
+      status: currentStatus,
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [hydrated, currentOfferId, currentNumber, client, clientDetails, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns]);
+  }, [hydrated, currentOfferId, currentNumber, client, clientDetails, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns, currentStatus]);
 
   const catalog = useMemo(() => [...customCatalog, ...baseCatalog], [customCatalog, baseCatalog]);
   const totals = useMemo(() => calculateOfferTotals(items, discount, labor), [items, discount, labor]);
@@ -273,6 +279,13 @@ export default function Home() {
       recent: savedOffers.slice(0, 5),
     };
   }, [savedOffers]);
+  const filteredOffers = useMemo(() => {
+    const query = normalizeName(offerSearch);
+    if (!query) return savedOffers;
+    return savedOffers.filter((offer) =>
+      normalizeName(`${offer.number} ${offer.client} ${offer.title} ${offer.status}`).includes(query),
+    );
+  }, [savedOffers, offerSearch]);
 
   const categories = useMemo(
     () => ["Toate", ...Array.from(new Set(catalog.map((item) => item.category))).sort()],
@@ -348,7 +361,7 @@ export default function Home() {
     const number = currentOfferId ? currentNumber : nextOfferNumber(savedOffers);
     const offer: SavedOffer = {
       id, number, client, clientDetails, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns,
-      status: "ciornă",
+      status: currentStatus,
       updatedAt: new Date().toISOString(),
     };
     const next = savedOffers.some((entry) => entry.id === id)
@@ -418,6 +431,7 @@ export default function Home() {
     setItems([]);
     setLabor(0);
     setDiscount(0);
+    setCurrentStatus("ciornă");
     setPdfColumns(defaultPdfColumns);
     setNotes(`Garanție: ${companySettings.defaultWarranty} luni\nValabilitate: ${companySettings.defaultValidity} zile de la data întocmirii`);
     localStorage.removeItem(DRAFT_KEY);
@@ -444,6 +458,7 @@ export default function Home() {
     setLabor(offer.labor);
     setDiscount(offer.discount);
     setNotes(offer.notes);
+    setCurrentStatus(offer.status);
     setPdfColumns(offer.pdfColumns ?? defaultPdfColumns);
     setView("editor");
   }
@@ -474,26 +489,41 @@ export default function Home() {
     }
   }
 
-  async function downloadPdf() {
+  async function changeOfferStatus(id: string, status: OfferStatus) {
+    const previous = savedOffers;
+    const updatedAt = new Date().toISOString();
+    setSavedOffers((current) => current.map((offer) => offer.id === id ? { ...offer, status, updatedAt } : offer));
+    try {
+      await updateRemoteOfferStatus(id, status);
+      if (currentOfferId === id) setCurrentStatus(status);
+      setSaveMessage(`Status schimbat în „${status}”`);
+    } catch (error) {
+      setSavedOffers(previous);
+      setSaveMessage(`Statusul nu a putut fi schimbat: ${(error as Error).message}`);
+    }
+  }
+
+  async function generatePdfForOffer(offer: SavedOffer) {
     setPdfBusy(true);
     setSaveMessage("Se generează PDF-ul…");
     try {
       const { generateOfferPdf } = await import("../lib/generate-offer-pdf");
+      const offerTotals = calculateOfferTotals(offer.items, offer.discount, offer.labor);
       await generateOfferPdf({
-        number: currentNumber,
-        client,
-        clientDetails,
-        title,
-        issueDate,
-        validityDays,
-        currency,
-        items,
-        labor,
-        discount,
-        notes,
+        number: offer.number,
+        client: offer.client,
+        clientDetails: offer.clientDetails ?? emptyClientDetails,
+        title: offer.title,
+        issueDate: offer.issueDate,
+        validityDays: offer.validityDays,
+        currency: offer.currency,
+        items: offer.items,
+        labor: offer.labor,
+        discount: offer.discount,
+        notes: offer.notes,
         company: companySettings,
-        totals,
-        columns: pdfColumns,
+        totals: offerTotals,
+        columns: offer.pdfColumns ?? defaultPdfColumns,
       });
       setSaveMessage("PDF descărcat");
     } catch (error) {
@@ -501,6 +531,26 @@ export default function Home() {
     } finally {
       setPdfBusy(false);
     }
+  }
+
+  async function downloadPdf() {
+    await generatePdfForOffer({
+      id: currentOfferId ?? "",
+      number: currentNumber,
+      client,
+      clientDetails,
+      title,
+      issueDate,
+      validityDays,
+      currency,
+      items,
+      labor,
+      discount,
+      notes,
+      pdfColumns,
+      status: currentStatus,
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   if (authLoading) {
@@ -579,25 +629,29 @@ export default function Home() {
         ) : view === "offers" ? (
           <>
             <header className="topbar">
-              <div><span className="eyebrow">ELECTRICSMART</span><h1>Oferte</h1><p>{savedOffers.length} salvate pe acest dispozitiv</p></div>
+              <div><span className="eyebrow">ELECTRICSMART</span><h1>Oferte</h1><p>{savedOffers.length} salvate și sincronizate</p></div>
               <button className="primary" onClick={newOffer}>＋ Ofertă nouă</button>
             </header>
             <section className="offers-page">
               <div className="local-notice"><strong>Versiune beta sincronizată</strong><span>Ofertele sunt salvate în proiectul Supabase Oferte și sunt disponibile după autentificare.</span></div>
+              <div className="offers-toolbar">
+                <label><span>Caută ofertă</span><input value={offerSearch} onChange={(event) => setOfferSearch(event.target.value)} placeholder="Număr, client, lucrare sau status…" /></label>
+                <strong>{filteredOffers.length} rezultate</strong>
+              </div>
               {savedOffers.length === 0 ? (
                 <div className="empty-state"><span>▤</span><h2>Nu există oferte salvate</h2><p>Creează prima ofertă și verifică fluxul complet înainte de conectarea bazei de date.</p><button className="primary" onClick={newOffer}>Creează oferta</button></div>
               ) : (
                 <div className="offers-table card">
                   <div className="offers-table-head"><span>Număr</span><span>Beneficiar și lucrare</span><span>Actualizată</span><span>Status</span><span></span></div>
-                  {savedOffers.map((offer) => {
+                  {filteredOffers.map((offer) => {
                     const offerTotal = calculateOfferTotals(offer.items, offer.discount, offer.labor).grand;
                     return (
                       <div className="offer-row" key={offer.id}>
                         <button className="offer-number" onClick={() => openOffer(offer)}>{offer.number}</button>
                         <button className="offer-main" onClick={() => openOffer(offer)}><strong>{offer.client || "Beneficiar necompletat"}</strong><span>{offer.title || "Lucrare fără titlu"} · {money.format(offerTotal)} {offer.currency === "RON" ? "lei" : "EUR"}</span></button>
                         <span className="offer-date">{new Date(offer.updatedAt).toLocaleDateString("ro-RO")}</span>
-                        <span className={`status ${offer.status}`}>{offer.status}</span>
-                        <div className="row-actions"><button onClick={() => duplicateOffer(offer)} title="Duplică">⧉</button><button onClick={() => deleteOffer(offer.id)} title="Șterge">×</button></div>
+                        <select className={`status-select ${offer.status}`} value={offer.status} onChange={(event) => changeOfferStatus(offer.id, event.target.value as OfferStatus)} aria-label={`Status ${offer.number}`}>{offerStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                        <div className="row-actions"><button onClick={() => generatePdfForOffer(offer)} title="Descarcă PDF" disabled={pdfBusy}>↓</button><button onClick={() => duplicateOffer(offer)} title="Duplică">⧉</button><button onClick={() => deleteOffer(offer.id)} title="Șterge">×</button></div>
                       </div>
                     );
                   })}
@@ -634,6 +688,7 @@ export default function Home() {
                     <label className="wide">Titlul lucrării<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
                     <label>Valabilitate<select value={validityDays} onChange={(event) => setValidityDays(event.target.value)}><option value="15">15 zile</option><option value="30">30 zile</option><option value="60">60 zile</option></select></label>
                     <label>Monedă<select value={currency} onChange={(event) => setCurrency(event.target.value)}><option>RON</option><option>EUR</option></select></label>
+                    <label>Status<select value={currentStatus} onChange={(event) => setCurrentStatus(event.target.value as OfferStatus)}>{offerStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
                     <div className="optional-client-fields wide">
                       <div><strong>Date opționale beneficiar</strong><span>Completează doar ce vrei să apară în ofertă.</span></div>
                       <label>CUI / CNP<input value={clientDetails.taxId} onChange={(event) => updateClientDetail("taxId", event.target.value)} placeholder="Opțional" /></label>

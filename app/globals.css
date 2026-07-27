@@ -141,12 +141,17 @@ table { border-collapse: collapse; width: 100%; }
 .offers-page { padding: 24px 28px 50px; max-width: 1180px; margin: 0 auto; }
 .local-notice { display: flex; align-items: center; gap: 18px; padding: 13px 16px; margin-bottom: 18px; border: 1px solid #c9d8f7; border-radius: 10px; background: #eef4ff; color: #274269; font-size: 11px; }
 .local-notice strong { color: #174fbf; white-space: nowrap; }
+.offers-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.offers-toolbar label { width: min(420px, 100%); }
+.offers-toolbar label span { font-size: 9px; }
+.offers-toolbar input { width: 100%; height: 39px; padding: 0 12px; }
+.offers-toolbar > strong { padding-bottom: 11px; color: var(--muted); font-size: 9px; white-space: nowrap; }
 .empty-state { min-height: 420px; display: grid; place-items: center; align-content: center; text-align: center; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 40px; }
 .empty-state > span { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; color: var(--blue); background: var(--blue-soft); font-size: 25px; }
 .empty-state h2 { margin: 16px 0 5px; font-size: 18px; }
 .empty-state p { max-width: 410px; margin: 0 0 20px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .offers-table { overflow: hidden; }
-.offers-table-head, .offer-row { display: grid; grid-template-columns: 130px minmax(240px, 1fr) 110px 100px 78px; align-items: center; gap: 12px; padding: 0 18px; }
+.offers-table-head, .offer-row { display: grid; grid-template-columns: 130px minmax(240px, 1fr) 110px 110px 100px; align-items: center; gap: 12px; padding: 0 18px; }
 .offers-table-head { height: 42px; background: #f7f8fa; border-bottom: 1px solid var(--line); color: #7c8492; text-transform: uppercase; letter-spacing: .06em; font-size: 9px; font-weight: 700; }
 .offer-row { min-height: 68px; border-bottom: 1px solid #edf0f4; }
 .offer-row:last-child { border-bottom: 0; }
@@ -160,6 +165,10 @@ table { border-collapse: collapse; width: 100%; }
 .status.acceptată { background: #e8f8f1; color: #087651; }
 .status.trimisă { background: #eaf1ff; color: #2455b3; }
 .status.respinsă { background: #fff0f2; color: #be304c; }
+.status-select { width: 108px; height: 30px; padding: 0 7px; border: 0; border-radius: 20px; background: #eef0f3; color: #626b79; font-size: 9px; text-transform: capitalize; }
+.status-select.acceptată { background: #e8f8f1; color: #087651; }
+.status-select.trimisă { background: #eaf1ff; color: #2455b3; }
+.status-select.respinsă { background: #fff0f2; color: #be304c; }
 .row-actions { justify-self: end; display: flex; gap: 4px; }
 .row-actions button { width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: #8b94a2; }
 .row-actions button:hover { background: #f0f2f5; color: var(--ink); }
@@ -273,9 +282,15 @@ table { border-collapse: collapse; width: 100%; }
   .dashboard-stats { grid-template-columns: 1fr 1fr; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .local-notice { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .offers-toolbar { align-items: stretch; flex-direction: column; gap: 5px; }
+  .offers-toolbar > strong { padding: 0; }
   .offers-table-head { display: none; }
-  .offer-row { grid-template-columns: 95px 1fr auto; padding: 13px; gap: 8px; }
-  .offer-date, .offer-row .status { display: none; }
+  .offer-row { grid-template-columns: 85px minmax(0, 1fr) auto; padding: 13px; gap: 8px; }
+  .offer-row .offer-number { grid-column: 1; grid-row: 1; }
+  .offer-row .offer-main { grid-column: 2; grid-row: 1; }
+  .offer-row .offer-date { display: none; }
+  .offer-row .status-select { grid-column: 2; grid-row: 2; }
+  .offer-row .row-actions { grid-column: 3; grid-row: 1 / 3; }
   .catalog-filters { grid-template-columns: 1fr; }
   .source-chip { display: none; }
   .catalog-result { grid-template-columns: 34px 1fr 28px; }
