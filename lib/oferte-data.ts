@@ -107,25 +107,94 @@ function mapCatalog(row: Record<string, unknown>): RemoteCatalogItem {
   };
 }
 
-export async function loadBetaData(userId: string, email: string) {
+export type UserCompanySummary = {
+  id: string;
+  name: string;
+  industry: string;
+  taxId: string;
+  role: string;
+};
+
+function mapCompany(row: Record<string, unknown>, companyId: string): RemoteCompany {
+  return {
+    id: companyId,
+    name: String(row.name ?? ""),
+    taxId: String(row.tax_id ?? ""),
+    registrationNumber: String(row.registration_number ?? ""),
+    address: String(row.address ?? ""),
+    phone: String(row.phone ?? ""),
+    email: String(row.email ?? ""),
+    iban: String(row.iban ?? ""),
+    bank: String(row.bank ?? ""),
+    defaultWarranty: Number(row.default_warranty ?? 24),
+    defaultValidity: Number(row.default_validity ?? 30),
+    industry: String(row.industry ?? "other"),
+    logoPath: String(row.logo_path ?? ""),
+    accentColor: String(row.accent_color ?? "#2563eb"),
+    offerPrefix: String(row.offer_prefix ?? "OF"),
+  };
+}
+
+export async function listUserCompanies(userId: string): Promise<UserCompanySummary[]> {
+  const result = await supabase
+    .from("company_members")
+    .select("role, company_id, created_at, companies(id, name, industry, tax_id)")
+    .eq("user_id", userId)
+    .order("created_at");
+  if (result.error) throw result.error;
+
+  return (result.data ?? []).flatMap((row) => {
+    const company = Array.isArray(row.companies) ? row.companies[0] : row.companies;
+    if (!company) return [];
+    return [{
+      id: String(company.id ?? row.company_id),
+      name: String(company.name ?? "Firmă"),
+      industry: String(company.industry ?? "other"),
+      taxId: String(company.tax_id ?? ""),
+      role: String(row.role ?? "member"),
+    }];
+  });
+}
+
+export async function loadBetaData(userId: string, email: string, preferredCompanyId?: string | null) {
   const profileResult = await supabase.from("profiles").upsert({ id: userId, email }, { onConflict: "id" });
   if (profileResult.error) throw profileResult.error;
+
+  const companies = await listUserCompanies(userId);
+  if (!companies.length) {
+    return {
+      needsOnboarding: true as const,
+      company: null,
+      companies: [] as UserCompanySummary[],
+      clients: [] as RemoteClient[],
+      catalog: [] as RemoteCatalogItem[],
+      offers: [] as RemoteOffer[],
+    };
+  }
+
+  const selectedSummary = companies.find((company) => company.id === preferredCompanyId) ?? companies[0];
+  const companyId = selectedSummary.id;
 
   const membership = await supabase
     .from("company_members")
     .select("company_id, role, companies(*)")
     .eq("user_id", userId)
-    .order("created_at")
-    .limit(1)
+    .eq("company_id", companyId)
     .maybeSingle();
   if (membership.error) throw membership.error;
   const companyRow = Array.isArray(membership.data?.companies)
     ? membership.data?.companies[0]
     : membership.data?.companies;
   if (!membership.data || !companyRow) {
-    return { needsOnboarding: true as const, company: null, clients: [], catalog: [], offers: [] };
+    return {
+      needsOnboarding: true as const,
+      company: null,
+      companies: [] as UserCompanySummary[],
+      clients: [] as RemoteClient[],
+      catalog: [] as RemoteCatalogItem[],
+      offers: [] as RemoteOffer[],
+    };
   }
-  const companyId = String(membership.data.company_id);
 
   let catalogResult = await supabase.from("catalog_items").select("*").eq("company_id", companyId).order("category").order("name");
   if (catalogResult.error) throw catalogResult.error;
@@ -165,23 +234,7 @@ export async function loadBetaData(userId: string, email: string) {
   if (clientsResult.error) throw clientsResult.error;
   if (offersResult.error) throw offersResult.error;
 
-  const company: RemoteCompany = {
-    id: companyId,
-    name: companyRow.name,
-    taxId: companyRow.tax_id,
-    registrationNumber: companyRow.registration_number,
-    address: companyRow.address,
-    phone: companyRow.phone,
-    email: companyRow.email,
-    iban: companyRow.iban,
-    bank: companyRow.bank,
-    defaultWarranty: companyRow.default_warranty,
-    defaultValidity: companyRow.default_validity,
-    industry: String(companyRow.industry ?? "other"),
-    logoPath: String(companyRow.logo_path ?? ""),
-    accentColor: String(companyRow.accent_color ?? "#2563eb"),
-    offerPrefix: String(companyRow.offer_prefix ?? "OF"),
-  };
+  const company = mapCompany(companyRow as Record<string, unknown>, companyId);
   const clients: RemoteClient[] = (clientsResult.data ?? []).map((row) => ({
     id: row.id,
     type: row.type,
@@ -241,6 +294,7 @@ export async function loadBetaData(userId: string, email: string) {
   return {
     needsOnboarding: false as const,
     company,
+    companies,
     clients,
     catalog: (catalogResult.data ?? []).map((row) => mapCatalog(row)),
     offers,

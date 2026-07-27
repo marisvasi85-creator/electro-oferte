@@ -1,5 +1,5 @@
 -- Multi-company foundation for Frizeo Oferte.
--- Existing ElectricSmart data is preserved and assigned to its current company.
+-- Existing company data is preserved and assigned to its current company.
 
 alter table public.companies
   add column if not exists industry text not null default 'electrical',

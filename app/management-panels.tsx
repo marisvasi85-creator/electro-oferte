@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { cuiHint, ibanHint, phoneHint, taxIdHint } from "../lib/ro-validation";
 
 export type ClientRecord = {
   id: string;
@@ -75,24 +76,28 @@ export function ClientsView({ clients, onChange, onCreateOffer, onDelete }: Clie
       <section className="management-page">
         <div className="local-notice"><strong>Sincronizare Supabase activă</strong><span>Modificările sunt salvate automat în proiectul Oferte.</span></div>
         <div className="management-grid">
-          {clients.map((client) => (
-            <article className="client-card card" key={client.id}>
-              <div className="client-card-head">
-                <span className="client-initial">{client.name.slice(0, 2).toUpperCase()}</span>
-                <label>Tip client<select value={client.type} onChange={(event) => updateClient(client.id, "type", event.target.value)}><option>firmă</option><option>persoană fizică</option></select></label>
-                <button className="remove-card" onClick={() => removeClient(client.id)} aria-label="Șterge clientul">×</button>
-              </div>
-              <label>Denumire / nume<input value={client.name} onChange={(event) => updateClient(client.id, "name", event.target.value)} /></label>
-              <div className="client-fields">
-                <label>CUI / CNP<input value={client.taxId} onChange={(event) => updateClient(client.id, "taxId", event.target.value)} /></label>
-                <label>Persoană contact<input value={client.contactPerson} onChange={(event) => updateClient(client.id, "contactPerson", event.target.value)} /></label>
-                <label>Telefon<input value={client.phone} onChange={(event) => updateClient(client.id, "phone", event.target.value)} /></label>
-                <label>E-mail<input type="email" value={client.email} onChange={(event) => updateClient(client.id, "email", event.target.value)} /></label>
-              </div>
-              <label>Adresă<input value={client.address} onChange={(event) => updateClient(client.id, "address", event.target.value)} /></label>
-              <button className="client-offer-button" onClick={() => onCreateOffer(client.name)}>Creează ofertă pentru client →</button>
-            </article>
-          ))}
+          {clients.map((client) => {
+            const taxHint = taxIdHint(client.taxId);
+            const phoneError = phoneHint(client.phone);
+            return (
+              <article className="client-card card" key={client.id}>
+                <div className="client-card-head">
+                  <span className="client-initial">{client.name.slice(0, 2).toUpperCase()}</span>
+                  <label>Tip client<select value={client.type} onChange={(event) => updateClient(client.id, "type", event.target.value)}><option>firmă</option><option>persoană fizică</option></select></label>
+                  <button className="remove-card" onClick={() => removeClient(client.id)} aria-label="Șterge clientul">×</button>
+                </div>
+                <label>Denumire / nume<input value={client.name} onChange={(event) => updateClient(client.id, "name", event.target.value)} /></label>
+                <div className="client-fields">
+                  <label>CUI / CNP<input value={client.taxId} onChange={(event) => updateClient(client.id, "taxId", event.target.value)} />{taxHint && <span className="field-hint error">{taxHint}</span>}</label>
+                  <label>Persoană contact<input value={client.contactPerson} onChange={(event) => updateClient(client.id, "contactPerson", event.target.value)} /></label>
+                  <label>Telefon<input value={client.phone} onChange={(event) => updateClient(client.id, "phone", event.target.value)} />{phoneError && <span className="field-hint error">{phoneError}</span>}</label>
+                  <label>E-mail<input type="email" value={client.email} onChange={(event) => updateClient(client.id, "email", event.target.value)} /></label>
+                </div>
+                <label>Adresă<input value={client.address} onChange={(event) => updateClient(client.id, "address", event.target.value)} /></label>
+                <button className="client-offer-button" onClick={() => onCreateOffer(client.name)}>Creează ofertă pentru client →</button>
+              </article>
+            );
+          })}
           {clients.length === 0 && <div className="empty-state"><span>♙</span><h2>Nu există clienți</h2><p>Adaugă primul client pentru a-l selecta rapid în ofertă.</p><button className="primary" onClick={addClient}>Adaugă client</button></div>}
         </div>
       </section>
@@ -114,6 +119,10 @@ export function SettingsView({ settings, onChange, onLogoUpload }: SettingsViewP
     });
   }
 
+  const taxHint = cuiHint(settings.taxId);
+  const phoneError = phoneHint(settings.phone);
+  const ibanError = ibanHint(settings.iban);
+
   return (
     <>
       <header className="topbar">
@@ -122,10 +131,10 @@ export function SettingsView({ settings, onChange, onLogoUpload }: SettingsViewP
       </header>
       <section className="management-page settings-layout">
         <section className="card settings-card">
-          <div className="section-heading"><span className="step">1</span><div><h2>Identitate fiscală</h2><p>Date publice precompletate din frizeo.ro</p></div></div>
+          <div className="section-heading"><span className="step">1</span><div><h2>Identitate fiscală</h2><p>Completează datele firmei tale — spațiile multi-firmă rămân separate</p></div></div>
           <div className="settings-form">
             <label className="wide">Denumirea firmei<input value={settings.name} onChange={(event) => update("name", event.target.value)} /></label>
-            <label>CUI<input value={settings.taxId} onChange={(event) => update("taxId", event.target.value)} /></label>
+            <label>CUI<input value={settings.taxId} onChange={(event) => update("taxId", event.target.value)} />{taxHint && <span className="field-hint error">{taxHint}</span>}</label>
             <label>Registrul Comerțului<input value={settings.registrationNumber} onChange={(event) => update("registrationNumber", event.target.value)} /></label>
             <label className="wide">Sediu<input value={settings.address} onChange={(event) => update("address", event.target.value)} /></label>
           </div>
@@ -142,9 +151,9 @@ export function SettingsView({ settings, onChange, onLogoUpload }: SettingsViewP
         <section className="card settings-card">
           <div className="section-heading"><span className="step">3</span><div><h2>Contact și plată</h2><p>Câmpurile bancare pot rămâne necompletate</p></div></div>
           <div className="settings-form">
-            <label>Telefon<input value={settings.phone} onChange={(event) => update("phone", event.target.value)} /></label>
+            <label>Telefon<input value={settings.phone} onChange={(event) => update("phone", event.target.value)} />{phoneError && <span className="field-hint error">{phoneError}</span>}</label>
             <label>E-mail<input type="email" value={settings.email} onChange={(event) => update("email", event.target.value)} /></label>
-            <label>IBAN<input value={settings.iban} onChange={(event) => update("iban", event.target.value)} placeholder="RO…" /></label>
+            <label>IBAN<input value={settings.iban} onChange={(event) => update("iban", event.target.value)} placeholder="RO…" />{ibanError && <span className="field-hint error">{ibanError}</span>}</label>
             <label>Bancă<input value={settings.bank} onChange={(event) => update("bank", event.target.value)} /></label>
           </div>
         </section>
