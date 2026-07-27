@@ -65,6 +65,7 @@ export type RemoteOffer = {
     quantity: boolean;
     unitPrice: boolean;
     total: boolean;
+    showDiscount: boolean;
   };
   status: "ciornă" | "trimisă" | "acceptată" | "respinsă";
   updatedAt: string;
@@ -193,6 +194,7 @@ export async function loadBetaData(userId: string, email: string) {
       quantity: row.pdf_columns?.quantity !== false,
       unitPrice: row.pdf_columns?.unitPrice !== false,
       total: row.pdf_columns?.total !== false,
+      showDiscount: row.pdf_columns?.showDiscount !== false,
     },
     status: row.status,
     updatedAt: row.updated_at,
@@ -276,7 +278,7 @@ export async function saveRemoteOffer(
     labor: offer.labor,
     discount: offer.discount,
     notes: offer.notes,
-    pdf_columns: offer.pdfColumns ?? { unit: true, quantity: true, unitPrice: true, total: true },
+    pdf_columns: offer.pdfColumns ?? { unit: true, quantity: true, unitPrice: true, total: true, showDiscount: true },
     status: offer.status,
     updated_at: offer.updatedAt,
   }).select("id").single();

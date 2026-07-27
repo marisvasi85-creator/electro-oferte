@@ -46,6 +46,7 @@ type GenerateOfferPdfInput = {
     quantity: boolean;
     unitPrice: boolean;
     total: boolean;
+    showDiscount: boolean;
   };
 };
 
@@ -212,9 +213,14 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
   const summaryRight = 555;
   y -= 24;
   const summaryRows: Array<[string, number, boolean?]> = [
-    ["Materiale fără TVA", input.totals.subtotal],
+    [
+      input.discount > 0 && !input.columns.showDiscount ? "Materiale nete fără TVA" : "Materiale fără TVA",
+      input.discount > 0 && !input.columns.showDiscount
+        ? input.totals.subtotal - input.totals.discountAmount
+        : input.totals.subtotal,
+    ],
     ...(input.totals.servicesSubtotal > 0 ? [["Servicii fără TVA", input.totals.servicesSubtotal] as [string, number]] : []),
-    ...(input.discount > 0 ? [[`Discount materiale (${input.discount}%)`, -input.totals.discountAmount] as [string, number]] : []),
+    ...(input.discount > 0 && input.columns.showDiscount ? [[`Discount materiale (${input.discount}%)`, -input.totals.discountAmount] as [string, number]] : []),
     ["TVA total", input.totals.vat],
     ["Manoperă globală", input.labor],
   ];

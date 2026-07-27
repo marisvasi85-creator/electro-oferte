@@ -69,9 +69,10 @@ type PdfColumns = {
   quantity: boolean;
   unitPrice: boolean;
   total: boolean;
+  showDiscount: boolean;
 };
 
-const defaultPdfColumns: PdfColumns = { unit: true, quantity: true, unitPrice: true, total: true };
+const defaultPdfColumns: PdfColumns = { unit: true, quantity: true, unitPrice: true, total: true, showDiscount: true };
 
 const DRAFT_KEY = "electro-oferte:draft:v1";
 
@@ -593,6 +594,16 @@ export default function Home() {
                       <label>Manoperă <div className="money-input"><input type="number" min="0" value={labor} onChange={(event) => setLabor(Number(event.target.value))} /><span>{currency === "RON" ? "lei" : "€"}</span></div></label>
                       <label>Discount materiale <div className="money-input"><input type="number" min="0" max="100" value={discount} onChange={(event) => setDiscount(Number(event.target.value))} /><span>%</span></div></label>
                     </div>
+                    {discount > 0 && (
+                      <label className="discount-visibility">
+                        <input
+                          type="checkbox"
+                          checked={pdfColumns.showDiscount}
+                          onChange={(event) => setPdfColumns((current) => ({ ...current, showDiscount: event.target.checked }))}
+                        />
+                        Arată discountul clientului în ofertă
+                      </label>
+                    )}
                   </div>
                   <div className="card totals-card">
                     <div><span>Materiale fără TVA</span><strong>{money.format(totals.subtotal)} {currency === "RON" ? "lei" : "€"}</strong></div>
@@ -638,7 +649,7 @@ export default function Home() {
                     <thead><tr><th>#</th><th>Descriere</th>{pdfColumns.unit && <th className="center">UM</th>}{pdfColumns.quantity && <th className="numeric">Cantitate</th>}{pdfColumns.unitPrice && <th className="numeric">Preț unitar cu TVA</th>}{pdfColumns.total && <th className="numeric">Total cu TVA</th>}</tr></thead>
                     <tbody>{items.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.name}</td>{pdfColumns.unit && <td className="center">{item.unit}</td>}{pdfColumns.quantity && <td className="numeric">{item.quantity}</td>}{pdfColumns.unitPrice && <td className="numeric">{money.format(item.unitPrice * (1 + item.vatRate / 100))}</td>}{pdfColumns.total && <td className="numeric">{money.format(item.quantity * item.unitPrice * (1 + item.vatRate / 100))}</td>}</tr>)}</tbody>
                   </table>
-                  <div className="paper-summary"><p><span>Materiale cu TVA</span><strong>{money.format(totals.materials)} {currency === "RON" ? "lei" : "EUR"}</strong></p>{totals.services > 0 && <p><span>Servicii cu TVA</span><strong>{money.format(totals.services)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}<p><span>Manoperă globală</span><strong>{money.format(labor)} {currency === "RON" ? "lei" : "EUR"}</strong></p><p><span>TOTAL GENERAL</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "EUR"}</strong></p></div>
+                  <div className="paper-summary"><p><span>{discount > 0 && !pdfColumns.showDiscount ? "Materiale nete fără TVA" : "Materiale fără TVA"}</span><strong>{money.format(discount > 0 && !pdfColumns.showDiscount ? totals.subtotal - totals.discountAmount : totals.subtotal)} {currency === "RON" ? "lei" : "EUR"}</strong></p>{discount > 0 && pdfColumns.showDiscount && <p className="discount"><span>Discount aplicat ({discount}%)</span><strong>-{money.format(totals.discountAmount)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}{totals.servicesSubtotal > 0 && <p><span>Servicii fără TVA</span><strong>{money.format(totals.servicesSubtotal)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}<p><span>TVA total</span><strong>{money.format(totals.vat)} {currency === "RON" ? "lei" : "EUR"}</strong></p><p><span>Manoperă globală</span><strong>{money.format(labor)} {currency === "RON" ? "lei" : "EUR"}</strong></p><p><span>TOTAL GENERAL</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "EUR"}</strong></p></div>
                   <div className="paper-notes"><strong>Condiții</strong>{notes.split("\n").filter(Boolean).map((line) => <p key={line}>{line}</p>)}</div>
                 </article>
               </aside>
