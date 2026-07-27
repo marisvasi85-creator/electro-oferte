@@ -415,6 +415,14 @@ export default function Home() {
     }
   }
 
+  function downloadPdf() {
+    const previousTitle = document.title;
+    const safeClient = (client || "client").replace(/[^a-zA-Z0-9ăâîșțĂÂÎȘȚ -]/g, "").trim().replace(/\s+/g, "-");
+    document.title = `${currentNumber}-${safeClient}`;
+    window.print();
+    window.setTimeout(() => { document.title = previousTitle; }, 500);
+  }
+
   if (authLoading) {
     return <main className="auth-page"><section className="auth-card"><h1>Se verifică sesiunea…</h1></section></main>;
   }
@@ -487,7 +495,7 @@ export default function Home() {
                 <p>{saveMessage} · {currentNumber}</p>
               </div>
               <div className="top-actions">
-                <button className="secondary" onClick={() => window.print()}>Previzualizare PDF</button>
+                <button className="secondary" onClick={downloadPdf} title="În fereastra deschisă alege Salvează ca PDF">Descarcă PDF</button>
                 <button className="primary" onClick={saveOffer}>Salvează oferta</button>
               </div>
             </header>
@@ -516,7 +524,7 @@ export default function Home() {
                   </div>
                   <div className="table-scroll">
                     <table>
-                      <thead><tr><th>#</th><th>Articol</th><th>Tip</th><th>UM</th><th>Cant.</th><th>Preț fără TVA</th><th>TVA</th><th>Total</th><th></th></tr></thead>
+                      <thead><tr><th>#</th><th>Articol</th><th>Tip</th><th>UM</th><th>Cant.</th><th>Preț fără TVA</th><th>Preț cu TVA</th><th>TVA</th><th>Total</th><th></th></tr></thead>
                       <tbody>
                         {items.map((item, index) => {
                           const lineSubtotal = item.quantity * item.unitPrice;
@@ -529,13 +537,14 @@ export default function Home() {
                               <td><select aria-label={`Unitate poziția ${index + 1}`} value={item.unit} onChange={(event) => updateItem(item.id, "unit", event.target.value)}><option value="buc">buc</option><option value="m">m</option><option value="set">set</option><option value="lucrare">lucrare</option><option value="zi">zi</option></select></td>
                               <td><input aria-label={`Cantitate poziția ${index + 1}`} type="number" min="0" step="0.01" value={item.quantity} onChange={(event) => updateItem(item.id, "quantity", event.target.value)} /></td>
                               <td><div className="money-input"><input aria-label={`Preț poziția ${index + 1}`} type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => updateItem(item.id, "unitPrice", event.target.value)} /><span>{currency === "RON" ? "lei" : "€"}</span></div></td>
+                              <td className="unit-price-vat">{money.format(item.unitPrice * (1 + item.vatRate / 100))} {currency === "RON" ? "lei" : "€"}</td>
                               <td><select aria-label={`TVA poziția ${index + 1}`} value={item.vatRate} onChange={(event) => updateItem(item.id, "vatRate", event.target.value)}><option value="21">21%</option><option value="11">11%</option><option value="0">0%</option></select></td>
                               <td className="line-total">{money.format(lineTotal)} {currency === "RON" ? "lei" : "€"}</td>
                               <td><button className="remove" aria-label={`Șterge poziția ${index + 1}`} onClick={() => removeItem(item.id)}>×</button></td>
                             </tr>
                           );
                         })}
-                        {items.length === 0 && <tr><td colSpan={9}><button className="empty-items" onClick={() => setCatalogOpen(true)}>Alege primul material sau serviciu din catalog</button></td></tr>}
+                        {items.length === 0 && <tr><td colSpan={10}><button className="empty-items" onClick={() => setCatalogOpen(true)}>Alege primul material sau serviciu din catalog</button></td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -574,8 +583,8 @@ export default function Home() {
                   <div className="paper-header"><div><strong>{companySettings.name.toUpperCase()}</strong><span>CUI {companySettings.taxId} · {companySettings.registrationNumber}</span><span>{companySettings.address}</span><span>Tel. {companySettings.phone}{companySettings.email ? ` · ${companySettings.email}` : ""}</span>{companySettings.iban && <span>IBAN {companySettings.iban}{companySettings.bank ? ` · ${companySettings.bank}` : ""}</span>}</div><div className="paper-logo">ES</div></div>
                   <div className="paper-title"><small>{currentNumber} · {issueDate.split("-").reverse().join(".")}</small><h3>{title || "Titlul lucrării"}</h3><p>Beneficiar: <strong>{client || "Beneficiar"}</strong></p></div>
                   <table className="paper-table">
-                    <thead><tr><th>#</th><th>Descriere</th><th>UM</th><th>Cant.</th>{previewMode === "detaliat" && <><th>Preț</th><th>Total</th></>}</tr></thead>
-                    <tbody>{items.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.name}</td><td>{item.unit}</td><td>{item.quantity}</td>{previewMode === "detaliat" && <><td>{money.format(item.unitPrice)}</td><td>{money.format(item.quantity * item.unitPrice * (1 + item.vatRate / 100))}</td></>}</tr>)}</tbody>
+                    <thead><tr><th>#</th><th>Descriere</th><th>UM</th><th>Cant.</th>{previewMode === "detaliat" && <><th>Preț cu TVA</th><th>Total cu TVA</th></>}</tr></thead>
+                    <tbody>{items.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.name}</td><td>{item.unit}</td><td>{item.quantity}</td>{previewMode === "detaliat" && <><td>{money.format(item.unitPrice * (1 + item.vatRate / 100))}</td><td>{money.format(item.quantity * item.unitPrice * (1 + item.vatRate / 100))}</td></>}</tr>)}</tbody>
                   </table>
                   <div className="paper-summary"><p><span>Materiale cu TVA</span><strong>{money.format(totals.materials)} {currency === "RON" ? "lei" : "EUR"}</strong></p>{totals.services > 0 && <p><span>Servicii cu TVA</span><strong>{money.format(totals.services)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}<p><span>Manoperă globală</span><strong>{money.format(labor)} {currency === "RON" ? "lei" : "EUR"}</strong></p><p><span>TOTAL GENERAL</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "EUR"}</strong></p></div>
                   <div className="paper-notes"><strong>Condiții</strong>{notes.split("\n").filter(Boolean).map((line) => <p key={line}>{line}</p>)}</div>

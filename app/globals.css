@@ -77,12 +77,14 @@ table { border-collapse: collapse; width: 100%; }
 .items-card td:nth-child(4) { width: 70px; }
 .items-card td:nth-child(5) { width: 76px; }
 .items-card td:nth-child(6) { width: 132px; }
-.items-card td:nth-child(7) { width: 72px; }
+.items-card td:nth-child(7) { width: 112px; }
+.items-card td:nth-child(8) { width: 72px; }
 .row-number { color: #9ca3af; text-align: center; }
 .money-input { display: flex; align-items: center; position: relative; }
 .money-input input { padding-right: 34px !important; }
 .money-input span { position: absolute; right: 8px; color: #8b93a1; font-size: 10px; font-weight: 500; }
 .line-total { font-weight: 650; text-align: right; white-space: nowrap; }
+.unit-price-vat { color: #42526a; font-weight: 650; text-align: right; white-space: nowrap; }
 .remove { width: 27px; height: 27px; border: 0; border-radius: 6px; background: transparent; color: #b1b7c2; font-size: 18px; }
 .remove:hover { color: #e11d48; background: #fff1f3; }
 .empty-items { width: 100%; border: 1px dashed #cbd5e1; background: #f8fafc; color: var(--blue); border-radius: 8px; padding: 18px; font-size: 11px; font-weight: 650; }
