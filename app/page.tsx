@@ -10,12 +10,14 @@ import {
   type CompanySettings,
 } from "./management-panels";
 import { AuthScreen } from "./auth-screen";
+import { CompanyOnboarding } from "./company-onboarding";
 import { CatalogManager, type ManagedCatalogItem } from "./catalog-manager";
 import { firstPopulatedSheet, parseLegacyOffer } from "./excel-import";
 import { supabase } from "../lib/supabase";
 import {
   addRemoteCatalogItems,
   allocateOfferNumber,
+  companyLogoUrl,
   deleteRemoteClient,
   deleteRemoteCatalogItem,
   deleteRemoteOffer,
@@ -23,6 +25,7 @@ import {
   saveRemoteOffer,
   syncClients,
   syncCompany,
+  uploadCompanyLogo,
   updateRemoteOfferStatus,
   updateRemoteCatalogItem,
 } from "../lib/oferte-data";
@@ -104,7 +107,7 @@ type PdfColumns = {
 
 const defaultPdfColumns: PdfColumns = { unit: true, quantity: true, unitPriceWithoutVat: false, unitPrice: true, total: true, showDiscount: true };
 
-const DRAFT_KEY = "electro-oferte:draft:v1";
+const DRAFT_KEY = "frizeo-oferte:draft:v2";
 
 const initialClients: ClientRecord[] = [
   { id: "client-modern", type: "firmă", name: "Modern Construct Service", taxId: "", address: "Piatra Neamț", contactPerson: "", phone: "", email: "" },
@@ -114,6 +117,7 @@ const initialClients: ClientRecord[] = [
 ];
 
 const initialCompanySettings: CompanySettings = {
+  id: "",
   name: "ElectricSmart.Co S.R.L.",
   taxId: "47684690",
   registrationNumber: "J02/287/2023",
@@ -124,6 +128,11 @@ const initialCompanySettings: CompanySettings = {
   bank: "",
   defaultWarranty: 24,
   defaultValidity: 30,
+  industry: "electrical",
+  logoPath: "",
+  logoUrl: "/brand/electric-smart-logo.jpg",
+  accentColor: "#2563eb",
+  offerPrefix: "OF",
 };
 
 const initialItems: OfferItem[] = [
@@ -209,6 +218,8 @@ function calculateOfferTotals(items: OfferItem[], discount: number, labor: numbe
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [dataReload, setDataReload] = useState(0);
   const [view, setView] = useState<"home" | "editor" | "offers" | "clients" | "catalog" | "settings">("home");
   const [items, setItems] = useState(initialItems);
   const [client, setClient] = useState("Modern Construct Service");
@@ -266,9 +277,15 @@ export default function Home() {
     loadBetaData(user.id, user.email ?? "marisvasi85@gmail.com")
       .then((data) => {
         if (cancelled) return;
+        if (data.needsOnboarding || !data.company) {
+          setNeedsOnboarding(true);
+          setHydrated(false);
+          return;
+        }
+        setNeedsOnboarding(false);
         setSavedOffers(data.offers);
         setClients(data.clients);
-        setCompanySettings(data.company);
+        setCompanySettings({ ...data.company, logoUrl: companyLogoUrl(data.company.logoPath) || (data.company.industry === "electrical" ? "/brand/electric-smart-logo.jpg" : "") });
         setBaseCatalog(data.catalog);
         setCustomCatalog([]);
         setCurrentNumber(nextOfferNumber(data.offers));
@@ -280,15 +297,15 @@ export default function Home() {
         setSaveMessage(`Eroare Supabase: ${error.message}`);
       });
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, dataReload]);
 
   useEffect(() => {
     if (!hydrated || !user) return;
     const timer = window.setTimeout(() => {
-      syncClients(user.id, clients).catch((error: Error) => setSaveMessage(`Eroare clienți: ${error.message}`));
+      syncClients(user.id, companySettings.id, clients).catch((error: Error) => setSaveMessage(`Eroare clienți: ${error.message}`));
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [hydrated, user, clients]);
+  }, [hydrated, user, clients, companySettings.id]);
 
   useEffect(() => {
     if (!hydrated || !user) return;
@@ -419,7 +436,7 @@ export default function Home() {
     try {
       const number = currentOfferId
         ? currentNumber
-        : await allocateOfferNumber(Number(issueDate.slice(0, 4)) || new Date().getFullYear());
+        : await allocateOfferNumber(Number(issueDate.slice(0, 4)) || new Date().getFullYear(), companySettings.id);
       const offer: SavedOffer = {
         id, number, client, clientDetails, title, issueDate, validityDays, currency, items, labor, laborOptions, discount, notes, pdfColumns,
         status: currentStatus,
@@ -435,7 +452,7 @@ export default function Home() {
         matchingClient = { id: crypto.randomUUID(), type: "firmă", name: clientName, ...clientDetails };
         const nextClients = [matchingClient, ...clients];
         setClients(nextClients);
-        await syncClients(user.id, nextClients);
+        await syncClients(user.id, companySettings.id, nextClients);
         clientAdded = true;
       }
 
@@ -464,11 +481,11 @@ export default function Home() {
         });
       });
       if (newCatalogItems.length) {
-        const insertedCatalog = await addRemoteCatalogItems(user.id, newCatalogItems);
+        const insertedCatalog = await addRemoteCatalogItems(user.id, companySettings.id, newCatalogItems);
         setCustomCatalog((current) => [...insertedCatalog, ...current]);
       }
 
-      await saveRemoteOffer(user.id, offer, matchingClient?.id ?? null);
+      await saveRemoteOffer(user.id, companySettings.id, offer, matchingClient?.id ?? null);
       setSavedOffers(next);
       setCurrentOfferId(id);
       setCurrentNumber(number);
@@ -596,7 +613,7 @@ export default function Home() {
     const exists = catalog.some((entry) => entry.id === item.id);
     const saved = exists
       ? await updateRemoteCatalogItem(item)
-      : (await addRemoteCatalogItems(user.id, [item]))[0];
+      : (await addRemoteCatalogItems(user.id, companySettings.id, [item]))[0];
     setBaseCatalog((current) => [
       saved,
       ...current.filter((entry) => entry.id !== saved.id),
@@ -612,8 +629,25 @@ export default function Home() {
 
   async function importCatalogItems(entries: ManagedCatalogItem[]) {
     if (!user) throw new Error("Sesiunea nu este disponibilă.");
-    const inserted = await addRemoteCatalogItems(user.id, entries);
+    const inserted = await addRemoteCatalogItems(user.id, companySettings.id, entries);
     setBaseCatalog((current) => [...inserted, ...current]);
+  }
+
+  async function handleLogoUpload(file: File) {
+    if (!companySettings.id) throw new Error("Firma nu este configurată.");
+    if (file.size > 2 * 1024 * 1024) {
+      setSaveMessage("Logo-ul trebuie să aibă maximum 2 MB.");
+      return;
+    }
+    try {
+      setSaveMessage("Se încarcă logo-ul…");
+      const logoPath = await uploadCompanyLogo(companySettings.id, file);
+      const logoUrl = `${companyLogoUrl(logoPath)}?v=${Date.now()}`;
+      setCompanySettings((current) => ({ ...current, logoPath, logoUrl }));
+      setSaveMessage("Logo actualizat");
+    } catch (error) {
+      setSaveMessage(`Logo-ul nu a putut fi încărcat: ${(error as Error).message}`);
+    }
   }
 
   function navigate(next: typeof view) {
@@ -801,16 +835,19 @@ export default function Home() {
     return <main className="auth-page"><section className="auth-card"><h1>Se verifică sesiunea…</h1></section></main>;
   }
   if (!user) return <AuthScreen />;
+  if (needsOnboarding) {
+    return <CompanyOnboarding user={user} onComplete={() => { setNeedsOnboarding(false); setSaveMessage("Se pregătește firma…"); setDataReload((value) => value + 1); }} />;
+  }
   if (!hydrated) {
-    return <main className="auth-page"><section className="auth-card"><h1>Pregătim versiunea beta…</h1><p>{saveMessage}</p></section></main>;
+    return <main className="auth-page"><section className="auth-card"><h1>Pregătim Frizeo Oferte…</h1><p>{saveMessage}</p></section></main>;
   }
 
   return (
     <main className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">E</div>
-          <div><strong>Electro Oferte</strong><span>ElectricSmart</span></div>
+          <div className="brand-mark">F</div>
+          <div><strong>Frizeo Oferte</strong><span>{companySettings.name}</span></div>
         </div>
         <nav aria-label="Navigare principală">
           <button className={view === "home" ? "active" : ""} onClick={() => navigate("home")}><Icon>⌂</Icon>Acasă</button>
@@ -820,8 +857,8 @@ export default function Home() {
           <button className={view === "settings" ? "active" : ""} onClick={() => navigate("settings")}><Icon>⚙</Icon>Setări firmă</button>
         </nav>
         <div className="company-card">
-          <span className="company-avatar">ES</span>
-          <div><strong>ElectricSmart.Co</strong><small>CUI 47684690</small></div>
+          <span className="company-avatar">{companySettings.name.slice(0, 2).toUpperCase()}</span>
+          <div><strong>{companySettings.name}</strong><small>{companySettings.taxId ? `CUI ${companySettings.taxId}` : user.email}</small></div>
           <button className="logout-button" onClick={() => supabase.auth.signOut()} title="Ieșire">↪</button>
         </div>
       </aside>
@@ -830,7 +867,7 @@ export default function Home() {
         {view === "home" ? (
           <>
             <header className="topbar">
-              <div><span className="eyebrow">ELECTRICSMART</span><h1>Panou principal</h1><p>O privire rapidă asupra activității de ofertare</p></div>
+              <div><span className="eyebrow">{companySettings.name.toUpperCase()}</span><h1>Panou principal</h1><p>O privire rapidă asupra activității de ofertare</p></div>
               <button className="primary" onClick={newOffer}>＋ Ofertă nouă</button>
             </header>
             <section className="dashboard-page">
@@ -871,7 +908,7 @@ export default function Home() {
         ) : view === "catalog" ? (
           <CatalogManager items={catalog} onSave={saveCatalogItem} onDelete={removeCatalogItem} onImport={importCatalogItems} onBack={() => setView("home")} />
         ) : view === "settings" ? (
-          <SettingsView settings={companySettings} onChange={setCompanySettings} />
+          <SettingsView settings={companySettings} onChange={setCompanySettings} onLogoUpload={handleLogoUpload} />
         ) : view === "offers" ? (
           <>
             <header className="topbar">
@@ -1054,7 +1091,7 @@ export default function Home() {
                   </div>
                 </div>
                 <article className="paper">
-                  <div className="paper-header"><div><strong>{companySettings.name.toUpperCase()}</strong><span>CUI {companySettings.taxId} · {companySettings.registrationNumber}</span><span>{companySettings.address}</span><span>Tel. {companySettings.phone}{companySettings.email ? ` · ${companySettings.email}` : ""}</span>{companySettings.iban && <span>IBAN {companySettings.iban}{companySettings.bank ? ` · ${companySettings.bank}` : ""}</span>}</div><Image className="paper-logo-image" src="/brand/electric-smart-logo.jpg" alt="Electric Smart" width={76} height={65} priority /></div>
+                  <div className="paper-header"><div><strong>{companySettings.name.toUpperCase()}</strong><span>CUI {companySettings.taxId} · {companySettings.registrationNumber}</span><span>{companySettings.address}</span><span>Tel. {companySettings.phone}{companySettings.email ? ` · ${companySettings.email}` : ""}</span>{companySettings.iban && <span>IBAN {companySettings.iban}{companySettings.bank ? ` · ${companySettings.bank}` : ""}</span>}</div>{companySettings.logoUrl && <Image unoptimized width={76} height={65} className="paper-logo-image" src={companySettings.logoUrl} alt={`Logo ${companySettings.name}`} />}</div>
                   <div className="paper-title"><small>{currentNumber} · {issueDate.split("-").reverse().join(".")}</small><h3>{title || "Titlul lucrării"}</h3><p>Beneficiar: <strong>{client || "Beneficiar"}</strong></p>{Object.values(clientDetails).some(Boolean) && <div className="paper-client-details">{clientDetails.taxId && <span>CUI/CNP: {clientDetails.taxId}</span>}{clientDetails.address && <span>{clientDetails.address}</span>}{clientDetails.contactPerson && <span>Contact: {clientDetails.contactPerson}</span>}{(clientDetails.phone || clientDetails.email) && <span>{[clientDetails.phone, clientDetails.email].filter(Boolean).join(" · ")}</span>}</div>}</div>
                   <table className="paper-table">
                     <thead><tr><th>#</th><th>Descriere</th>{pdfColumns.unit && <th className="center">UM</th>}{pdfColumns.quantity && <th className="numeric">Cantitate</th>}{pdfColumns.unitPriceWithoutVat && <th className="numeric">Preț unitar fără TVA</th>}{pdfColumns.unitPrice && <th className="numeric">Preț unitar cu TVA</th>}{pdfColumns.total && <th className="numeric">Total cu TVA</th>}</tr></thead>

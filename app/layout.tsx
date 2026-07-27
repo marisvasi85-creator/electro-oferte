@@ -8,13 +8,13 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const imageUrl = `${protocol}://${host}/og.png`;
   return {
-    title: "Electro Oferte · ElectricSmart",
-    description: "Oferte electrice profesionale, calculate corect în câteva minute.",
+    title: "Frizeo Oferte",
+    description: "Oferte profesionale pentru orice tip de afacere.",
     icons: { icon: "/favicon.svg" },
     openGraph: {
-      title: "Electro Oferte",
-      description: "Oferte electrice corecte, în câteva minute.",
-      images: [{ url: imageUrl, width: 1536, height: 1024, alt: "Electro Oferte - aplicație de ofertare ElectricSmart" }],
+      title: "Frizeo Oferte",
+      description: "Creează, personalizează și trimite oferte profesionale.",
+      images: [{ url: imageUrl, width: 1536, height: 1024, alt: "Frizeo Oferte" }],
     },
     twitter: { card: "summary_large_image", images: [imageUrl] },
   };

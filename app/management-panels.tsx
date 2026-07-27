@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 export type ClientRecord = {
   id: string;
   type: "firmă" | "persoană fizică";
@@ -12,6 +14,7 @@ export type ClientRecord = {
 };
 
 export type CompanySettings = {
+  id: string;
   name: string;
   taxId: string;
   registrationNumber: string;
@@ -22,6 +25,11 @@ export type CompanySettings = {
   bank: string;
   defaultWarranty: number;
   defaultValidity: number;
+  industry: string;
+  logoPath: string;
+  logoUrl: string;
+  accentColor: string;
+  offerPrefix: string;
 };
 
 type ClientsViewProps = {
@@ -95,9 +103,10 @@ export function ClientsView({ clients, onChange, onCreateOffer, onDelete }: Clie
 type SettingsViewProps = {
   settings: CompanySettings;
   onChange: (settings: CompanySettings) => void;
+  onLogoUpload?: (file: File) => Promise<void>;
 };
 
-export function SettingsView({ settings, onChange }: SettingsViewProps) {
+export function SettingsView({ settings, onChange, onLogoUpload }: SettingsViewProps) {
   function update(field: keyof CompanySettings, value: string) {
     onChange({
       ...settings,
@@ -122,7 +131,16 @@ export function SettingsView({ settings, onChange }: SettingsViewProps) {
           </div>
         </section>
         <section className="card settings-card">
-          <div className="section-heading"><span className="step">2</span><div><h2>Contact și plată</h2><p>Câmpurile bancare pot rămâne necompletate</p></div></div>
+          <div className="section-heading"><span className="step">2</span><div><h2>Logo și documente</h2><p>Identitatea vizuală folosită în ofertă, PDF și Excel</p></div></div>
+          <div className="settings-form">
+            <label className="wide">Logo firmă<input type="file" accept="image/png,image/jpeg" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onLogoUpload?.(file); }} /></label>
+            <label>Prefix ofertă<input value={settings.offerPrefix} maxLength={8} onChange={(event) => update("offerPrefix", event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} placeholder="OF" /></label>
+            <label>Culoare document<input type="color" value={settings.accentColor} onChange={(event) => update("accentColor", event.target.value)} /></label>
+          </div>
+          {settings.logoUrl && <Image unoptimized width={180} height={90} className="settings-logo-preview" src={settings.logoUrl} alt={`Logo ${settings.name}`} />}
+        </section>
+        <section className="card settings-card">
+          <div className="section-heading"><span className="step">3</span><div><h2>Contact și plată</h2><p>Câmpurile bancare pot rămâne necompletate</p></div></div>
           <div className="settings-form">
             <label>Telefon<input value={settings.phone} onChange={(event) => update("phone", event.target.value)} /></label>
             <label>E-mail<input type="email" value={settings.email} onChange={(event) => update("email", event.target.value)} /></label>
@@ -131,7 +149,7 @@ export function SettingsView({ settings, onChange }: SettingsViewProps) {
           </div>
         </section>
         <section className="card settings-card">
-          <div className="section-heading"><span className="step">3</span><div><h2>Valori implicite</h2><p>Se aplică ofertelor noi și pot fi modificate ulterior</p></div></div>
+          <div className="section-heading"><span className="step">4</span><div><h2>Valori implicite</h2><p>Se aplică ofertelor noi și pot fi modificate ulterior</p></div></div>
           <div className="settings-form">
             <label>Garanție implicită<input type="number" min="0" value={settings.defaultWarranty} onChange={(event) => update("defaultWarranty", event.target.value)} /><span className="field-suffix">luni</span></label>
             <label>Valabilitate implicită<input type="number" min="1" value={settings.defaultValidity} onChange={(event) => update("defaultValidity", event.target.value)} /><span className="field-suffix">zile</span></label>
@@ -139,6 +157,7 @@ export function SettingsView({ settings, onChange }: SettingsViewProps) {
         </section>
         <aside className="settings-preview card">
           <span className="eyebrow">ANTET DOCUMENT</span>
+          {settings.logoUrl && <Image unoptimized width={180} height={90} className="settings-logo-preview" src={settings.logoUrl} alt="" />}
           <strong>{settings.name || "Denumirea firmei"}</strong>
           <p>CUI {settings.taxId || "—"} · {settings.registrationNumber || "—"}</p>
           <p>{settings.address || "Adresa firmei"}</p>

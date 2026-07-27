@@ -121,6 +121,10 @@ table { border-collapse: collapse; width: 100%; }
 .paper-header strong, .paper-header span { display: block; }
 .paper-header strong { color: var(--ink); font-size: 9px; }
 .paper-logo-image { width: 76px; height: 65px; object-fit: contain; }
+.settings-logo-preview { display: block; max-width: 180px; max-height: 90px; object-fit: contain; margin-top: 14px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.onboarding-card { width: min(520px, calc(100vw - 32px)); }
+.onboarding-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.onboarding-card select { width: 100%; height: 42px; padding: 0 11px; }
 .top-actions button:disabled { opacity: .65; cursor: wait; }
 .save-state span { font-weight: 750; }
 .save-state.dirty span { color: #c97700; }

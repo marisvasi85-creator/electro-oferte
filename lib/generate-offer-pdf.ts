@@ -1,5 +1,5 @@
 import fontkit from "@pdf-lib/fontkit";
-import { PDFDocument, PDFFont, PDFPage, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb } from "pdf-lib";
 
 type PdfItem = {
   name: string;
@@ -18,6 +18,7 @@ type PdfCompany = {
   email: string;
   iban: string;
   bank: string;
+  logoUrl?: string;
 };
 
 type PdfTotals = {
@@ -103,14 +104,25 @@ function drawRight(page: PDFPage, text: string, right: number, y: number, font: 
 export async function createOfferPdf(input: GenerateOfferPdfInput) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  const [regularBytes, boldBytes, logoBytes] = await Promise.all([
+  const [regularBytes, boldBytes] = await Promise.all([
     fetch("/fonts/DejaVuSans.ttf").then((response) => response.arrayBuffer()),
     fetch("/fonts/DejaVuSans-Bold.ttf").then((response) => response.arrayBuffer()),
-    fetch("/brand/electric-smart-logo.jpg").then((response) => response.arrayBuffer()),
   ]);
   const regular = await pdf.embedFont(regularBytes, { subset: true });
   const bold = await pdf.embedFont(boldBytes, { subset: true });
-  const logo = await pdf.embedJpg(logoBytes);
+  let logo: PDFImage | null = null;
+  if (input.company.logoUrl) {
+    try {
+      const response = await fetch(input.company.logoUrl);
+      const bytes = await response.arrayBuffer();
+      const type = response.headers.get("content-type") ?? "";
+      logo = type.includes("png") || input.company.logoUrl.toLowerCase().includes(".png")
+        ? await pdf.embedPng(bytes)
+        : await pdf.embedJpg(bytes);
+    } catch {
+      logo = null;
+    }
+  }
 
   let page = pdf.addPage([595.28, 841.89]);
   let y = 790;
@@ -126,11 +138,11 @@ export async function createOfferPdf(input: GenerateOfferPdfInput) {
         input.company.iban ? `IBAN ${input.company.iban}${input.company.bank ? ` | ${input.company.bank}` : ""}` : "",
       ].filter(Boolean);
       companyLines.forEach((line, index) => target.drawText(line, { x: 40, y: 773 - index * 12, font: regular, size: 7.5, color: gray }));
-      target.drawImage(logo, { x: 466, y: 735, width: 82, height: 70 });
+      if (logo) target.drawImage(logo, { x: 466, y: 735, width: 82, height: 70 });
       target.drawLine({ start: { x: 40, y: 720 }, end: { x: 555, y: 720 }, thickness: 1, color: light });
     } else {
       target.drawText(`${input.number} - continuare`, { x: 40, y: 800, font: bold, size: 9, color: navy });
-      target.drawImage(logo, { x: 510, y: 782, width: 35, height: 30 });
+      if (logo) target.drawImage(logo, { x: 510, y: 782, width: 35, height: 30 });
     }
   };
 

@@ -28,6 +28,7 @@ export type RemoteClient = {
 };
 
 export type RemoteCompany = {
+  id: string;
   name: string;
   taxId: string;
   registrationNumber: string;
@@ -38,6 +39,10 @@ export type RemoteCompany = {
   bank: string;
   defaultWarranty: number;
   defaultValidity: number;
+  industry: string;
+  logoPath: string;
+  accentColor: string;
+  offerPrefix: string;
 };
 
 export type RemoteOffer = {
@@ -84,19 +89,6 @@ export type RemoteOffer = {
   updatedAt: string;
 };
 
-const defaultCompany: RemoteCompany = {
-  name: "ElectricSmart.Co S.R.L.",
-  taxId: "47684690",
-  registrationNumber: "J02/287/2023",
-  address: "România, Arad, Socodor, nr. 77",
-  phone: "0751 970 357",
-  email: "info@frizeo.ro",
-  iban: "",
-  bank: "",
-  defaultWarranty: 24,
-  defaultValidity: 30,
-};
-
 function mapCatalog(row: Record<string, unknown>): RemoteCatalogItem {
   return {
     id: String(row.id),
@@ -119,33 +111,34 @@ export async function loadBetaData(userId: string, email: string) {
   const profileResult = await supabase.from("profiles").upsert({ id: userId, email }, { onConflict: "id" });
   if (profileResult.error) throw profileResult.error;
 
-  const { data: initialCompanyRow, error: companyError } = await supabase.from("companies").select("*").maybeSingle();
-  if (companyError) throw companyError;
-  let companyRow = initialCompanyRow;
-  if (!companyRow) {
-    const inserted = await supabase.from("companies").insert({
-      owner_id: userId,
-      name: defaultCompany.name,
-      tax_id: defaultCompany.taxId,
-      registration_number: defaultCompany.registrationNumber,
-      address: defaultCompany.address,
-      phone: defaultCompany.phone,
-      email: defaultCompany.email,
-      iban: defaultCompany.iban,
-      bank: defaultCompany.bank,
-      default_warranty: defaultCompany.defaultWarranty,
-      default_validity: defaultCompany.defaultValidity,
-    }).select().single();
-    if (inserted.error) throw inserted.error;
-    companyRow = inserted.data;
+  const membership = await supabase
+    .from("company_members")
+    .select("company_id, role, companies(*)")
+    .eq("user_id", userId)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  if (membership.error) throw membership.error;
+  const companyRow = Array.isArray(membership.data?.companies)
+    ? membership.data?.companies[0]
+    : membership.data?.companies;
+  if (!membership.data || !companyRow) {
+    return { needsOnboarding: true as const, company: null, clients: [], catalog: [], offers: [] };
   }
+  const companyId = String(membership.data.company_id);
 
-  let catalogResult = await supabase.from("catalog_items").select("*").order("category").order("name");
+  let catalogResult = await supabase.from("catalog_items").select("*").eq("company_id", companyId).order("category").order("name");
   if (catalogResult.error) throw catalogResult.error;
   if (!catalogResult.data?.length) {
-    const source = await fetch("/catalog.json").then((response) => response.json()) as RemoteCatalogItem[];
+    const catalogFile = companyRow.industry === "windows_doors"
+      ? "/catalog-windows-doors.json"
+      : companyRow.industry === "electrical" ? "/catalog.json" : null;
+    const source = catalogFile
+      ? await fetch(catalogFile).then((response) => response.json()) as RemoteCatalogItem[]
+      : [];
     const rows = source.map((item) => ({
       owner_id: userId,
+      company_id: companyId,
       code: item.code,
       name: item.name,
       category: item.category,
@@ -158,19 +151,22 @@ export async function loadBetaData(userId: string, email: string) {
       specifications: item.specifications,
       source_type: item.sourceType,
     }));
-    const seeded = await supabase.from("catalog_items").insert(rows).select("*");
-    if (seeded.error) throw seeded.error;
-    catalogResult = seeded;
+    if (rows.length) {
+      const seeded = await supabase.from("catalog_items").insert(rows).select("*");
+      if (seeded.error) throw seeded.error;
+      catalogResult = seeded;
+    }
   }
 
   const [clientsResult, offersResult] = await Promise.all([
-    supabase.from("clients").select("*").order("name"),
-    supabase.from("offers").select("*, offer_items(*)").order("updated_at", { ascending: false }),
+    supabase.from("clients").select("*").eq("company_id", companyId).order("name"),
+    supabase.from("offers").select("*, offer_items(*)").eq("company_id", companyId).order("updated_at", { ascending: false }),
   ]);
   if (clientsResult.error) throw clientsResult.error;
   if (offersResult.error) throw offersResult.error;
 
   const company: RemoteCompany = {
+    id: companyId,
     name: companyRow.name,
     taxId: companyRow.tax_id,
     registrationNumber: companyRow.registration_number,
@@ -181,6 +177,10 @@ export async function loadBetaData(userId: string, email: string) {
     bank: companyRow.bank,
     defaultWarranty: companyRow.default_warranty,
     defaultValidity: companyRow.default_validity,
+    industry: String(companyRow.industry ?? "other"),
+    logoPath: String(companyRow.logo_path ?? ""),
+    accentColor: String(companyRow.accent_color ?? "#2563eb"),
+    offerPrefix: String(companyRow.offer_prefix ?? "OF"),
   };
   const clients: RemoteClient[] = (clientsResult.data ?? []).map((row) => ({
     id: row.id,
@@ -239,6 +239,7 @@ export async function loadBetaData(userId: string, email: string) {
   }));
 
   return {
+    needsOnboarding: false as const,
     company,
     clients,
     catalog: (catalogResult.data ?? []).map((row) => mapCatalog(row)),
@@ -246,11 +247,12 @@ export async function loadBetaData(userId: string, email: string) {
   };
 }
 
-export async function syncClients(userId: string, clients: RemoteClient[]) {
+export async function syncClients(userId: string, companyId: string, clients: RemoteClient[]) {
   if (!clients.length) return;
   const result = await supabase.from("clients").upsert(clients.map((client) => ({
     id: client.id,
     owner_id: userId,
+    company_id: companyId,
     type: client.type,
     name: client.name,
     tax_id: client.taxId,
@@ -269,7 +271,7 @@ export async function deleteRemoteClient(id: string) {
 }
 
 export async function syncCompany(userId: string, settings: RemoteCompany) {
-  const result = await supabase.from("companies").upsert({
+  const result = await supabase.from("companies").update({
     owner_id: userId,
     name: settings.name,
     tax_id: settings.taxId,
@@ -281,19 +283,26 @@ export async function syncCompany(userId: string, settings: RemoteCompany) {
     bank: settings.bank,
     default_warranty: settings.defaultWarranty,
     default_validity: settings.defaultValidity,
+    industry: settings.industry,
+    logo_path: settings.logoPath,
+    accent_color: settings.accentColor,
+    offer_prefix: settings.offerPrefix,
+    onboarding_completed: true,
     updated_at: new Date().toISOString(),
-  }, { onConflict: "owner_id" });
+  }).eq("id", settings.id);
   if (result.error) throw result.error;
 }
 
 export async function saveRemoteOffer(
   userId: string,
+  companyId: string,
   offer: RemoteOffer,
   clientId: string | null,
 ) {
   const saved = await supabase.from("offers").upsert({
     id: offer.id,
     owner_id: userId,
+    company_id: companyId,
     client_id: clientId,
     number: offer.number,
     client_name: offer.client,
@@ -318,6 +327,7 @@ export async function saveRemoteOffer(
     const inserted = await supabase.from("offer_items").insert(offer.items.map((item, index) => ({
       offer_id: offer.id,
       owner_id: userId,
+      company_id: companyId,
       catalog_item_id: item.catalogId && !item.catalogId.startsWith("CUS-") ? item.catalogId : null,
       position: index + 1,
       kind: item.kind ?? "material",
@@ -347,10 +357,11 @@ export async function updateRemoteOfferStatus(id: string, status: RemoteOffer["s
   return result.data;
 }
 
-export async function addRemoteCatalogItems(userId: string, items: RemoteCatalogItem[]) {
+export async function addRemoteCatalogItems(userId: string, companyId: string, items: RemoteCatalogItem[]) {
   if (!items.length) return [] as RemoteCatalogItem[];
   const result = await supabase.from("catalog_items").insert(items.map((item) => ({
     owner_id: userId,
+    company_id: companyId,
     code: item.code,
     name: item.name,
     category: item.category,
@@ -368,10 +379,57 @@ export async function addRemoteCatalogItems(userId: string, items: RemoteCatalog
   return (result.data ?? []).map((row) => mapCatalog(row));
 }
 
-export async function allocateOfferNumber(year: number) {
-  const result = await supabase.rpc("next_offer_number", { p_year: year });
+export async function allocateOfferNumber(year: number, companyId: string) {
+  const result = await supabase.rpc("next_offer_number", { p_year: year, p_company_id: companyId });
   if (result.error) throw result.error;
   return String(result.data);
+}
+
+export async function createCompanyForUser(
+  userId: string,
+  email: string,
+  input: { name: string; industry: string; taxId?: string; phone?: string },
+) {
+  const profile = await supabase.from("profiles").upsert({ id: userId, email }, { onConflict: "id" });
+  if (profile.error) throw profile.error;
+  const inserted = await supabase.from("companies").insert({
+    owner_id: userId,
+    name: input.name,
+    industry: input.industry,
+    tax_id: input.taxId ?? "",
+    phone: input.phone ?? "",
+    email,
+    default_warranty: input.industry === "windows_doors" ? 24 : 24,
+    default_validity: 30,
+    onboarding_completed: true,
+  }).select("*").single();
+  if (inserted.error) throw inserted.error;
+  const membership = await supabase.from("company_members").insert({
+    company_id: inserted.data.id,
+    user_id: userId,
+    role: "owner",
+  });
+  if (membership.error) {
+    await supabase.from("companies").delete().eq("id", inserted.data.id);
+    throw membership.error;
+  }
+  return String(inserted.data.id);
+}
+
+export async function uploadCompanyLogo(companyId: string, file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase() || "png";
+  const path = `${companyId}/logo.${extension}`;
+  const upload = await supabase.storage.from("company-assets").upload(path, file, {
+    upsert: true,
+    contentType: file.type,
+  });
+  if (upload.error) throw upload.error;
+  return path;
+}
+
+export function companyLogoUrl(path: string) {
+  if (!path) return "";
+  return supabase.storage.from("company-assets").getPublicUrl(path).data.publicUrl;
 }
 
 export async function updateRemoteCatalogItem(item: RemoteCatalogItem) {
