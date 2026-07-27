@@ -10,16 +10,20 @@ import {
   type CompanySettings,
 } from "./management-panels";
 import { AuthScreen } from "./auth-screen";
+import { CatalogManager, type ManagedCatalogItem } from "./catalog-manager";
 import { supabase } from "../lib/supabase";
 import {
   addRemoteCatalogItems,
+  allocateOfferNumber,
   deleteRemoteClient,
+  deleteRemoteCatalogItem,
   deleteRemoteOffer,
   loadBetaData,
   saveRemoteOffer,
   syncClients,
   syncCompany,
   updateRemoteOfferStatus,
+  updateRemoteCatalogItem,
 } from "../lib/oferte-data";
 
 type OfferItem = {
@@ -46,6 +50,7 @@ type CatalogItem = {
   vatRate: number;
   specifications: string;
   sourceType: string;
+  active: boolean;
 };
 
 type SavedOffer = {
@@ -59,6 +64,7 @@ type SavedOffer = {
   currency: string;
   items: OfferItem[];
   labor: number;
+  laborOptions?: LaborOptions;
   discount: number;
   notes: string;
   pdfColumns?: PdfColumns;
@@ -68,6 +74,13 @@ type SavedOffer = {
 
 type OfferStatus = SavedOffer["status"];
 const offerStatuses: OfferStatus[] = ["ciornă", "trimisă", "acceptată", "respinsă"];
+
+type LaborOptions = {
+  vatRate: number;
+  showLine: boolean;
+};
+
+const defaultLaborOptions: LaborOptions = { vatRate: 0, showLine: true };
 
 type OfferClientDetails = {
   taxId: string;
@@ -143,7 +156,25 @@ function normalizeName(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("ro").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function calculateOfferTotals(items: OfferItem[], discount: number, labor: number) {
+function offerSignature(offer: Partial<SavedOffer>) {
+  return JSON.stringify({
+    client: offer.client ?? "",
+    clientDetails: offer.clientDetails ?? emptyClientDetails,
+    title: offer.title ?? "",
+    issueDate: offer.issueDate ?? "",
+    validityDays: offer.validityDays ?? "",
+    currency: offer.currency ?? "RON",
+    items: offer.items ?? [],
+    labor: offer.labor ?? 0,
+    laborOptions: offer.laborOptions ?? defaultLaborOptions,
+    discount: offer.discount ?? 0,
+    notes: offer.notes ?? "",
+    pdfColumns: offer.pdfColumns ?? defaultPdfColumns,
+    status: offer.status ?? "ciornă",
+  });
+}
+
+function calculateOfferTotals(items: OfferItem[], discount: number, labor: number, laborOptions: LaborOptions = defaultLaborOptions) {
   const materialsSubtotal = items
     .filter((item) => (item.kind ?? "material") !== "labor")
     .reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -157,12 +188,16 @@ function calculateOfferTotals(items: OfferItem[], discount: number, labor: numbe
   const serviceVat = items
     .filter((item) => item.kind === "labor")
     .reduce((sum, item) => sum + item.quantity * item.unitPrice * (item.vatRate / 100), 0);
-  const vat = materialVat + serviceVat;
+  const laborVat = labor * laborOptions.vatRate / 100;
+  const laborTotal = labor + laborVat;
+  const vat = materialVat + serviceVat + laborVat;
   return {
     subtotal: materialsSubtotal,
     servicesSubtotal,
     discountAmount,
     vat,
+    laborVat,
+    laborTotal,
     materials: materialsSubtotal - discountAmount + materialVat,
     services: servicesSubtotal + serviceVat,
     grand: materialsSubtotal - discountAmount + servicesSubtotal + vat + labor,
@@ -172,7 +207,7 @@ function calculateOfferTotals(items: OfferItem[], discount: number, labor: numbe
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [view, setView] = useState<"home" | "editor" | "offers" | "clients" | "settings">("home");
+  const [view, setView] = useState<"home" | "editor" | "offers" | "clients" | "catalog" | "settings">("home");
   const [items, setItems] = useState(initialItems);
   const [client, setClient] = useState("Modern Construct Service");
   const [clientDetails, setClientDetails] = useState<OfferClientDetails>(emptyClientDetails);
@@ -181,6 +216,7 @@ export default function Home() {
   const [validityDays, setValidityDays] = useState("30");
   const [currency, setCurrency] = useState("RON");
   const [labor, setLabor] = useState(4200);
+  const [laborOptions, setLaborOptions] = useState<LaborOptions>(defaultLaborOptions);
   const [discount, setDiscount] = useState(0);
   const [notes, setNotes] = useState("Garanție: 24 luni\nValabilitate: 30 zile de la data întocmirii\nOferta nu include costurile de deplasare și cazare.");
   const [currentStatus, setCurrentStatus] = useState<OfferStatus>("ciornă");
@@ -199,6 +235,12 @@ export default function Home() {
   const [clients, setClients] = useState<ClientRecord[]>(initialClients);
   const [companySettings, setCompanySettings] = useState<CompanySettings>(initialCompanySettings);
   const [offerSearch, setOfferSearch] = useState("");
+  const [savedSignature, setSavedSignature] = useState("");
+  const currentSignature = useMemo(() => offerSignature({
+    client, clientDetails, title, issueDate, validityDays, currency, items, labor, laborOptions,
+    discount, notes, pdfColumns, status: currentStatus,
+  }), [client, clientDetails, title, issueDate, validityDays, currency, items, labor, laborOptions, discount, notes, pdfColumns, currentStatus]);
+  const isDirty = view === "editor" && currentSignature !== savedSignature;
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -252,26 +294,37 @@ export default function Home() {
   }, [hydrated, user, companySettings]);
 
   useEffect(() => {
+    if (!isDirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isDirty]);
+
+  useEffect(() => {
     if (!hydrated) return;
     const draft: Partial<SavedOffer> = {
       id: currentOfferId ?? undefined,
       number: currentNumber,
-      client, clientDetails, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns,
+      client, clientDetails, title, issueDate, validityDays, currency, items, labor, laborOptions, discount, notes, pdfColumns,
       status: currentStatus,
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [hydrated, currentOfferId, currentNumber, client, clientDetails, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns, currentStatus]);
+  }, [hydrated, currentOfferId, currentNumber, client, clientDetails, title, issueDate, validityDays, currency, items, labor, laborOptions, discount, notes, pdfColumns, currentStatus]);
 
   const catalog = useMemo(() => [...customCatalog, ...baseCatalog], [customCatalog, baseCatalog]);
-  const totals = useMemo(() => calculateOfferTotals(items, discount, labor), [items, discount, labor]);
+  const activeCatalog = useMemo(() => catalog.filter((item) => item.active), [catalog]);
+  const totals = useMemo(() => calculateOfferTotals(items, discount, labor, laborOptions), [items, discount, labor, laborOptions]);
   const dashboard = useMemo(() => {
     const ronValue = savedOffers
       .filter((offer) => offer.currency === "RON")
-      .reduce((sum, offer) => sum + calculateOfferTotals(offer.items, offer.discount, offer.labor).grand, 0);
+      .reduce((sum, offer) => sum + calculateOfferTotals(offer.items, offer.discount, offer.labor, offer.laborOptions).grand, 0);
     const euroValue = savedOffers
       .filter((offer) => offer.currency === "EUR")
-      .reduce((sum, offer) => sum + calculateOfferTotals(offer.items, offer.discount, offer.labor).grand, 0);
+      .reduce((sum, offer) => sum + calculateOfferTotals(offer.items, offer.discount, offer.labor, offer.laborOptions).grand, 0);
     return {
       ronValue,
       euroValue,
@@ -288,17 +341,17 @@ export default function Home() {
   }, [savedOffers, offerSearch]);
 
   const categories = useMemo(
-    () => ["Toate", ...Array.from(new Set(catalog.map((item) => item.category))).sort()],
-    [catalog],
+    () => ["Toate", ...Array.from(new Set(activeCatalog.map((item) => item.category))).sort()],
+    [activeCatalog],
   );
 
   const filteredCatalog = useMemo(() => {
     const query = catalogQuery.trim().toLocaleLowerCase("ro");
-    return catalog
+    return activeCatalog
       .filter((item) => catalogCategory === "Toate" || item.category === catalogCategory)
       .filter((item) => !query || `${item.code} ${item.name} ${item.category} ${item.specifications}`.toLocaleLowerCase("ro").includes(query))
       .slice(0, 80);
-  }, [catalog, catalogCategory, catalogQuery]);
+  }, [activeCatalog, catalogCategory, catalogQuery]);
 
   function updateItem(id: number, field: keyof OfferItem, value: string) {
     setItems((current) =>
@@ -358,16 +411,18 @@ export default function Home() {
     }
     setSaveMessage("Se salvează în Supabase…");
     const id = currentOfferId ?? crypto.randomUUID();
-    const number = currentOfferId ? currentNumber : nextOfferNumber(savedOffers);
-    const offer: SavedOffer = {
-      id, number, client, clientDetails, title, issueDate, validityDays, currency, items, labor, discount, notes, pdfColumns,
-      status: currentStatus,
-      updatedAt: new Date().toISOString(),
-    };
-    const next = savedOffers.some((entry) => entry.id === id)
-      ? savedOffers.map((entry) => entry.id === id ? offer : entry)
-      : [offer, ...savedOffers];
     try {
+      const number = currentOfferId
+        ? currentNumber
+        : await allocateOfferNumber(Number(issueDate.slice(0, 4)) || new Date().getFullYear());
+      const offer: SavedOffer = {
+        id, number, client, clientDetails, title, issueDate, validityDays, currency, items, labor, laborOptions, discount, notes, pdfColumns,
+        status: currentStatus,
+        updatedAt: new Date().toISOString(),
+      };
+      const next = savedOffers.some((entry) => entry.id === id)
+        ? savedOffers.map((entry) => entry.id === id ? offer : entry)
+        : [offer, ...savedOffers];
       let clientAdded = false;
       const clientName = client.trim();
       let matchingClient = clients.find((entry) => normalizeName(entry.name) === normalizeName(clientName));
@@ -400,6 +455,7 @@ export default function Home() {
           vatRate: item.vatRate,
           specifications: "",
           sourceType: "adăugat manual",
+          active: true,
         });
       });
       if (newCatalogItems.length) {
@@ -411,6 +467,7 @@ export default function Home() {
       setSavedOffers(next);
       setCurrentOfferId(id);
       setCurrentNumber(number);
+      setSavedSignature(offerSignature(offer));
       localStorage.setItem(DRAFT_KEY, JSON.stringify(offer));
       const additions = [clientAdded ? "client nou" : "", newCatalogItems.length ? `${newCatalogItems.length} articole în catalog` : ""].filter(Boolean);
       setSaveMessage(`Salvat în Supabase la ${new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" })}${additions.length ? ` · adăugat: ${additions.join(", ")}` : ""}`);
@@ -430,11 +487,13 @@ export default function Home() {
     setCurrency("RON");
     setItems([]);
     setLabor(0);
+    setLaborOptions(defaultLaborOptions);
     setDiscount(0);
     setCurrentStatus("ciornă");
     setPdfColumns(defaultPdfColumns);
     setNotes(`Garanție: ${companySettings.defaultWarranty} luni\nValabilitate: ${companySettings.defaultValidity} zile de la data întocmirii`);
     localStorage.removeItem(DRAFT_KEY);
+    setSavedSignature("");
     setView("editor");
   }
 
@@ -456,16 +515,19 @@ export default function Home() {
     setCurrency(offer.currency);
     setItems(offer.items);
     setLabor(offer.labor);
+    setLaborOptions(offer.laborOptions ?? defaultLaborOptions);
     setDiscount(offer.discount);
     setNotes(offer.notes);
     setCurrentStatus(offer.status);
     setPdfColumns(offer.pdfColumns ?? defaultPdfColumns);
+    setSavedSignature(offerSignature(offer));
     setView("editor");
   }
 
   function duplicateOffer(offer: SavedOffer) {
     openOffer({ ...offer, id: "", number: nextOfferNumber(savedOffers), status: "ciornă" });
     setCurrentOfferId(null);
+    setSavedSignature("");
   }
 
   async function deleteOffer(id: string) {
@@ -489,6 +551,51 @@ export default function Home() {
     }
   }
 
+  async function saveCatalogItem(item: ManagedCatalogItem) {
+    if (!user) throw new Error("Sesiunea nu este disponibilă.");
+    const exists = catalog.some((entry) => entry.id === item.id);
+    const saved = exists
+      ? await updateRemoteCatalogItem(item)
+      : (await addRemoteCatalogItems(user.id, [item]))[0];
+    setBaseCatalog((current) => [
+      saved,
+      ...current.filter((entry) => entry.id !== saved.id),
+    ]);
+    setCustomCatalog((current) => current.filter((entry) => entry.id !== saved.id));
+  }
+
+  async function removeCatalogItem(id: string) {
+    await deleteRemoteCatalogItem(id);
+    setBaseCatalog((current) => current.filter((entry) => entry.id !== id));
+    setCustomCatalog((current) => current.filter((entry) => entry.id !== id));
+  }
+
+  async function importCatalogItems(entries: ManagedCatalogItem[]) {
+    if (!user) throw new Error("Sesiunea nu este disponibilă.");
+    const inserted = await addRemoteCatalogItems(user.id, entries);
+    setBaseCatalog((current) => [...inserted, ...current]);
+  }
+
+  function navigate(next: typeof view) {
+    if (isDirty && !window.confirm("Oferta are modificări nesalvate. Vrei să părăsești pagina?")) return;
+    setView(next);
+  }
+
+  function downloadBackupCsv() {
+    const escape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows: unknown[][] = [["tip", "id", "nume_numar", "categorie_client", "status_tip", "valoare_pret", "moneda_um", "detalii_json"]];
+    clients.forEach((entry) => rows.push(["client", entry.id, entry.name, entry.type, "", "", "", JSON.stringify(entry)]));
+    catalog.forEach((entry) => rows.push(["catalog", entry.id, entry.name, entry.category, entry.active ? "activ" : "inactiv", entry.unitPrice, entry.currency, JSON.stringify(entry)]));
+    savedOffers.forEach((entry) => rows.push(["ofertă", entry.id, entry.number, entry.client, entry.status, calculateOfferTotals(entry.items, entry.discount, entry.labor, entry.laborOptions).grand, entry.currency, JSON.stringify(entry)]));
+    const csv = `\uFEFF${rows.map((row) => row.map(escape).join(";")).join("\r\n")}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `backup-electro-oferte-${today()}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function changeOfferStatus(id: string, status: OfferStatus) {
     const previous = savedOffers;
     const updatedAt = new Date().toISOString();
@@ -508,7 +615,7 @@ export default function Home() {
     setSaveMessage("Se generează PDF-ul…");
     try {
       const { generateOfferPdf } = await import("../lib/generate-offer-pdf");
-      const offerTotals = calculateOfferTotals(offer.items, offer.discount, offer.labor);
+      const offerTotals = calculateOfferTotals(offer.items, offer.discount, offer.labor, offer.laborOptions);
       await generateOfferPdf({
         number: offer.number,
         client: offer.client,
@@ -519,6 +626,7 @@ export default function Home() {
         currency: offer.currency,
         items: offer.items,
         labor: offer.labor,
+        laborOptions: offer.laborOptions ?? defaultLaborOptions,
         discount: offer.discount,
         notes: offer.notes,
         company: companySettings,
@@ -545,6 +653,7 @@ export default function Home() {
       currency,
       items,
       labor,
+      laborOptions,
       discount,
       notes,
       pdfColumns,
@@ -569,11 +678,11 @@ export default function Home() {
           <div><strong>Electro Oferte</strong><span>ElectricSmart</span></div>
         </div>
         <nav aria-label="Navigare principală">
-          <button className={view === "home" ? "active" : ""} onClick={() => setView("home")}><Icon>⌂</Icon>Acasă</button>
-          <button className={view === "offers" ? "active" : ""} onClick={() => setView("offers")}><Icon>▤</Icon>Oferte <span className="count">{savedOffers.length}</span></button>
-          <button className={view === "clients" ? "active" : ""} onClick={() => setView("clients")}><Icon>♙</Icon>Clienți <span className="count">{clients.length}</span></button>
-          <button onClick={() => setCatalogOpen(true)}><Icon>◇</Icon>Catalog <span className="count">{catalog.length}</span></button>
-          <button className={view === "settings" ? "active" : ""} onClick={() => setView("settings")}><Icon>⚙</Icon>Setări firmă</button>
+          <button className={view === "home" ? "active" : ""} onClick={() => navigate("home")}><Icon>⌂</Icon>Acasă</button>
+          <button className={view === "offers" ? "active" : ""} onClick={() => navigate("offers")}><Icon>▤</Icon>Oferte <span className="count">{savedOffers.length}</span></button>
+          <button className={view === "clients" ? "active" : ""} onClick={() => navigate("clients")}><Icon>♙</Icon>Clienți <span className="count">{clients.length}</span></button>
+          <button className={view === "catalog" ? "active" : ""} onClick={() => navigate("catalog")}><Icon>◇</Icon>Catalog <span className="count">{catalog.length}</span></button>
+          <button className={view === "settings" ? "active" : ""} onClick={() => navigate("settings")}><Icon>⚙</Icon>Setări firmă</button>
         </nav>
         <div className="company-card">
           <span className="company-avatar">ES</span>
@@ -592,12 +701,12 @@ export default function Home() {
             <section className="dashboard-page">
               <div className="welcome-card">
                 <div><span className="eyebrow">BUN VENIT</span><h2>Ce vrei să faci astăzi?</h2><p>Creează o ofertă nouă sau continuă rapid una dintre ofertele recente.</p></div>
-                <div className="dashboard-actions"><button className="primary" onClick={newOffer}>＋ Creează ofertă</button><button className="secondary" onClick={() => setView("offers")}>Vezi toate ofertele</button></div>
+                <div className="dashboard-actions"><button className="primary" onClick={newOffer}>＋ Creează ofertă</button><button className="secondary" onClick={() => setView("offers")}>Vezi toate ofertele</button><button className="secondary" onClick={downloadBackupCsv}>Export backup CSV</button></div>
               </div>
               <div className="dashboard-stats">
                 <button onClick={() => setView("offers")}><span>▤</span><div><small>Oferte salvate</small><strong>{savedOffers.length}</strong></div></button>
                 <button onClick={() => setView("clients")}><span>♙</span><div><small>Clienți</small><strong>{clients.length}</strong></div></button>
-                <button onClick={() => setCatalogOpen(true)}><span>◇</span><div><small>Articole în catalog</small><strong>{catalog.length}</strong></div></button>
+                <button onClick={() => setView("catalog")}><span>◇</span><div><small>Articole în catalog</small><strong>{catalog.length}</strong></div></button>
                 <button onClick={() => setView("offers")}><span>◷</span><div><small>Ciorne în lucru</small><strong>{dashboard.drafts}</strong></div></button>
               </div>
               <div className="dashboard-grid">
@@ -607,7 +716,7 @@ export default function Home() {
                     <button className="recent-offer" key={offer.id} onClick={() => openOffer(offer)}>
                       <span className="recent-icon">▤</span>
                       <span><strong>{offer.client || "Beneficiar necompletat"}</strong><small>{offer.number} · {offer.title || "Lucrare fără titlu"}</small></span>
-                      <span className="recent-total">{money.format(calculateOfferTotals(offer.items, offer.discount, offer.labor).grand)} {offer.currency === "RON" ? "lei" : "EUR"}</span>
+                      <span className="recent-total">{money.format(calculateOfferTotals(offer.items, offer.discount, offer.labor, offer.laborOptions).grand)} {offer.currency === "RON" ? "lei" : "EUR"}</span>
                     </button>
                   )) : <div className="dashboard-empty"><p>Nu există încă oferte salvate.</p><button className="primary" onClick={newOffer}>Creează prima ofertă</button></div>}
                 </section>
@@ -624,6 +733,8 @@ export default function Home() {
           </>
         ) : view === "clients" ? (
           <ClientsView clients={clients} onChange={setClients} onCreateOffer={newOfferForClient} onDelete={handleDeleteClient} />
+        ) : view === "catalog" ? (
+          <CatalogManager items={catalog} onSave={saveCatalogItem} onDelete={removeCatalogItem} onImport={importCatalogItems} onBack={() => setView("home")} />
         ) : view === "settings" ? (
           <SettingsView settings={companySettings} onChange={setCompanySettings} />
         ) : view === "offers" ? (
@@ -644,7 +755,7 @@ export default function Home() {
                 <div className="offers-table card">
                   <div className="offers-table-head"><span>Număr</span><span>Beneficiar și lucrare</span><span>Actualizată</span><span>Status</span><span></span></div>
                   {filteredOffers.map((offer) => {
-                    const offerTotal = calculateOfferTotals(offer.items, offer.discount, offer.labor).grand;
+                    const offerTotal = calculateOfferTotals(offer.items, offer.discount, offer.labor, offer.laborOptions).grand;
                     return (
                       <div className="offer-row" key={offer.id}>
                         <button className="offer-number" onClick={() => openOffer(offer)}>{offer.number}</button>
@@ -663,9 +774,9 @@ export default function Home() {
           <>
             <header className="topbar">
               <div>
-                <button className="back" onClick={() => setView("offers")}>← Înapoi la oferte</button>
+                <button className="back" onClick={() => navigate("offers")}>← Înapoi la oferte</button>
                 <h1>{currentOfferId ? "Editează oferta" : "Ofertă nouă"}</h1>
-                <p>{saveMessage} · {currentNumber}</p>
+                <p className={`save-state ${isDirty ? "dirty" : "saved"}`}><span>{isDirty ? "● Modificări nesalvate" : "✓ Salvat"}</span> · {saveMessage} · {currentNumber}</p>
               </div>
               <div className="top-actions">
                 <button className="secondary" onClick={downloadPdf} disabled={pdfBusy}>
@@ -739,8 +850,15 @@ export default function Home() {
                     <div className="section-heading"><span className="step">3</span><div><h2>Manoperă și ajustări</h2><p>Costuri finale ale lucrării</p></div></div>
                     <div className="compact-fields">
                       <label>Manoperă <div className="money-input"><input type="number" min="0" value={labor} onChange={(event) => setLabor(Number(event.target.value))} /><span>{currency === "RON" ? "lei" : "€"}</span></div></label>
+                      <label>TVA manoperă<select value={laborOptions.vatRate} onChange={(event) => setLaborOptions((current) => ({ ...current, vatRate: Number(event.target.value) }))}><option value="0">Fără TVA</option><option value="11">11%</option><option value="21">21%</option></select></label>
                       <label>Discount materiale <div className="money-input"><input type="number" min="0" max="100" value={discount} onChange={(event) => setDiscount(Number(event.target.value))} /><span>%</span></div></label>
                     </div>
+                    {labor > 0 && (
+                      <label className="discount-visibility">
+                        <input type="checkbox" checked={laborOptions.showLine} onChange={(event) => setLaborOptions((current) => ({ ...current, showLine: event.target.checked }))} />
+                        Arată manopera separat în ofertă
+                      </label>
+                    )}
                     {discount > 0 && (
                       <label className="discount-visibility">
                         <input
@@ -757,7 +875,7 @@ export default function Home() {
                     {totals.servicesSubtotal > 0 && <div><span>Servicii din poziții</span><strong>{money.format(totals.servicesSubtotal)} {currency === "RON" ? "lei" : "€"}</strong></div>}
                     {discount > 0 && <div className="discount"><span>Discount ({discount}%)</span><strong>-{money.format(totals.discountAmount)} {currency === "RON" ? "lei" : "€"}</strong></div>}
                     <div><span>TVA total</span><strong>{money.format(totals.vat)} {currency === "RON" ? "lei" : "€"}</strong></div>
-                    <div><span>Manoperă globală</span><strong>{money.format(labor)} {currency === "RON" ? "lei" : "€"}</strong></div>
+                    <div><span>Manoperă{laborOptions.vatRate > 0 ? " cu TVA" : ""}</span><strong>{money.format(totals.laborTotal)} {currency === "RON" ? "lei" : "€"}</strong></div>
                     <div className="grand-total"><span>Total general</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "€"}</strong></div>
                   </div>
                 </section>
@@ -796,7 +914,7 @@ export default function Home() {
                     <thead><tr><th>#</th><th>Descriere</th>{pdfColumns.unit && <th className="center">UM</th>}{pdfColumns.quantity && <th className="numeric">Cantitate</th>}{pdfColumns.unitPrice && <th className="numeric">Preț unitar cu TVA</th>}{pdfColumns.total && <th className="numeric">Total cu TVA</th>}</tr></thead>
                     <tbody>{items.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td>{item.name}</td>{pdfColumns.unit && <td className="center">{item.unit}</td>}{pdfColumns.quantity && <td className="numeric">{item.quantity}</td>}{pdfColumns.unitPrice && <td className="numeric">{money.format(item.unitPrice * (1 + item.vatRate / 100))}</td>}{pdfColumns.total && <td className="numeric">{money.format(item.quantity * item.unitPrice * (1 + item.vatRate / 100))}</td>}</tr>)}</tbody>
                   </table>
-                  <div className="paper-summary"><p><span>{discount > 0 && !pdfColumns.showDiscount ? "Materiale nete fără TVA" : "Materiale fără TVA"}</span><strong>{money.format(discount > 0 && !pdfColumns.showDiscount ? totals.subtotal - totals.discountAmount : totals.subtotal)} {currency === "RON" ? "lei" : "EUR"}</strong></p>{discount > 0 && pdfColumns.showDiscount && <p className="discount"><span>Discount aplicat ({discount}%)</span><strong>-{money.format(totals.discountAmount)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}{totals.servicesSubtotal > 0 && <p><span>Servicii fără TVA</span><strong>{money.format(totals.servicesSubtotal)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}<p><span>TVA total</span><strong>{money.format(totals.vat)} {currency === "RON" ? "lei" : "EUR"}</strong></p><p><span>Manoperă globală</span><strong>{money.format(labor)} {currency === "RON" ? "lei" : "EUR"}</strong></p><p><span>TOTAL GENERAL</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "EUR"}</strong></p></div>
+                  <div className="paper-summary"><p><span>{discount > 0 && !pdfColumns.showDiscount ? "Materiale nete fără TVA" : "Materiale fără TVA"}</span><strong>{money.format(discount > 0 && !pdfColumns.showDiscount ? totals.subtotal - totals.discountAmount : totals.subtotal)} {currency === "RON" ? "lei" : "EUR"}</strong></p>{discount > 0 && pdfColumns.showDiscount && <p className="discount"><span>Discount aplicat ({discount}%)</span><strong>-{money.format(totals.discountAmount)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}{totals.servicesSubtotal > 0 && <p><span>Servicii fără TVA</span><strong>{money.format(totals.servicesSubtotal)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}<p><span>TVA total</span><strong>{money.format(totals.vat)} {currency === "RON" ? "lei" : "EUR"}</strong></p>{labor > 0 && laborOptions.showLine && <p><span>Manoperă{laborOptions.vatRate > 0 ? " cu TVA" : ""}</span><strong>{money.format(totals.laborTotal)} {currency === "RON" ? "lei" : "EUR"}</strong></p>}<p><span>TOTAL GENERAL</span><strong>{money.format(totals.grand)} {currency === "RON" ? "lei" : "EUR"}</strong></p></div>
                   <div className="paper-notes"><strong>Condiții</strong>{notes.split("\n").filter(Boolean).map((line) => <p key={line}>{line}</p>)}</div>
                 </article>
               </aside>

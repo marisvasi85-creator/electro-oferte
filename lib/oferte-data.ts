@@ -13,6 +13,7 @@ export type RemoteCatalogItem = {
   vatRate: number;
   specifications: string;
   sourceType: string;
+  active: boolean;
 };
 
 export type RemoteClient = {
@@ -65,6 +66,10 @@ export type RemoteOffer = {
     vatRate: number;
   }>;
   labor: number;
+  laborOptions?: {
+    vatRate: number;
+    showLine: boolean;
+  };
   discount: number;
   notes: string;
   pdfColumns?: {
@@ -105,6 +110,7 @@ function mapCatalog(row: Record<string, unknown>): RemoteCatalogItem {
     vatRate: Number(row.vat_rate ?? 21),
     specifications: String(row.specifications ?? ""),
     sourceType: String(row.source_type ?? "catalog inițial"),
+    active: row.active !== false,
   };
 }
 
@@ -201,6 +207,10 @@ export async function loadBetaData(userId: string, email: string) {
     validityDays: String(row.validity_days),
     currency: row.currency,
     labor: Number(row.labor),
+    laborOptions: {
+      vatRate: Number(row.labor_options?.vatRate ?? 0),
+      showLine: row.labor_options?.showLine !== false,
+    },
     discount: Number(row.discount),
     notes: row.notes,
     pdfColumns: {
@@ -291,6 +301,7 @@ export async function saveRemoteOffer(
     validity_days: Number(offer.validityDays),
     currency: offer.currency,
     labor: offer.labor,
+    labor_options: offer.laborOptions ?? { vatRate: 0, showLine: true },
     discount: offer.discount,
     notes: offer.notes,
     pdf_columns: offer.pdfColumns ?? { unit: true, quantity: true, unitPrice: true, total: true, showDiscount: true },
@@ -349,7 +360,39 @@ export async function addRemoteCatalogItems(userId: string, items: RemoteCatalog
     vat_rate: item.vatRate,
     specifications: item.specifications,
     source_type: item.sourceType,
+    active: item.active,
   }))).select("*");
   if (result.error) throw result.error;
   return (result.data ?? []).map((row) => mapCatalog(row));
+}
+
+export async function allocateOfferNumber(year: number) {
+  const result = await supabase.rpc("next_offer_number", { p_year: year });
+  if (result.error) throw result.error;
+  return String(result.data);
+}
+
+export async function updateRemoteCatalogItem(item: RemoteCatalogItem) {
+  const result = await supabase.from("catalog_items").update({
+    code: item.code,
+    name: item.name,
+    category: item.category,
+    subcategory: item.subcategory,
+    kind: item.kind,
+    unit: item.unit,
+    unit_price: item.unitPrice,
+    currency: item.currency,
+    vat_rate: item.vatRate,
+    specifications: item.specifications,
+    source_type: item.sourceType,
+    active: item.active,
+    updated_at: new Date().toISOString(),
+  }).eq("id", item.id).select("*").single();
+  if (result.error) throw result.error;
+  return mapCatalog(result.data);
+}
+
+export async function deleteRemoteCatalogItem(id: string) {
+  const result = await supabase.from("catalog_items").delete().eq("id", id);
+  if (result.error) throw result.error;
 }

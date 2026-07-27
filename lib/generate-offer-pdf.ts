@@ -25,6 +25,7 @@ type PdfTotals = {
   servicesSubtotal: number;
   discountAmount: number;
   vat: number;
+  laborTotal: number;
   grand: number;
 };
 
@@ -44,6 +45,10 @@ type GenerateOfferPdfInput = {
   currency: string;
   items: PdfItem[];
   labor: number;
+  laborOptions: {
+    vatRate: number;
+    showLine: boolean;
+  };
   discount: number;
   notes: string;
   company: PdfCompany;
@@ -241,7 +246,9 @@ export async function generateOfferPdf(input: GenerateOfferPdfInput) {
     ...(input.totals.servicesSubtotal > 0 ? [["Servicii fără TVA", input.totals.servicesSubtotal] as [string, number]] : []),
     ...(input.discount > 0 && input.columns.showDiscount ? [[`Discount materiale (${input.discount}%)`, -input.totals.discountAmount] as [string, number]] : []),
     ["TVA total", input.totals.vat],
-    ["Manoperă globală", input.labor],
+    ...(input.labor > 0 && input.laborOptions.showLine
+      ? [[`Manoperă${input.laborOptions.vatRate > 0 ? ` cu TVA (${input.laborOptions.vatRate}%)` : ""}`, input.totals.laborTotal] as [string, number]]
+      : []),
   ];
   summaryRows.forEach(([label, value]) => {
     page.drawText(label, { x: summaryX, y, font: regular, size: 8, color: gray });
