@@ -21,6 +21,8 @@ test("defines the public Frizeo Oferte authentication and onboarding", async () 
   assert.doesNotMatch(auth, /marisvasi85@gmail\.com/);
   assert.match(onboarding, /Uși și ferestre PVC/);
   assert.match(onboarding, /createCompanyForUser/);
+  assert.match(onboarding, /mode/);
+  assert.match(onboarding, /Adaugă o firmă nouă/);
   assert.match(recovery, /updateUser/);
   assert.doesNotMatch(auth, /SUPABASE_SERVICE_ROLE_KEY/);
 });
@@ -38,6 +40,11 @@ test("uses the public Supabase client and company-scoped persistence", async () 
   assert.match(page, /saveRemoteOffer/);
   assert.match(page, /companySettings\.id/);
   assert.match(page, /FRIZEO OFERTE/);
+  assert.match(page, /CompanySwitcher/);
+  assert.match(page, /preferredCompanyId/);
+  assert.match(page, /draftStorageKey/);
+  assert.match(page, /ACTIVE_COMPANY_KEY/);
+  assert.match(page, /Adaugă firmă|startAddCompany/);
   assert.doesNotMatch(page, /ElectricSmart/);
   assert.doesNotMatch(page, /teomaris27@gmail\.com/);
   assert.doesNotMatch(page, /0751 970 357/);
@@ -45,6 +52,8 @@ test("uses the public Supabase client and company-scoped persistence", async () 
   assert.doesNotMatch(page, /electric-smart-logo/);
   assert.match(data, /company_id/);
   assert.match(data, /company_members/);
+  assert.match(data, /listUserCompanies/);
+  assert.match(data, /preferredCompanyId/);
 });
 
 test("ships Romanian validation, security headers and legal pages", async () => {

@@ -11,6 +11,7 @@ import {
 } from "./management-panels";
 import { AuthScreen } from "./auth-screen";
 import { CompanyOnboarding } from "./company-onboarding";
+import { CompanySwitcher } from "./company-switcher";
 import { CatalogManager, type ManagedCatalogItem } from "./catalog-manager";
 import { firstPopulatedSheet, parseLegacyOffer } from "./excel-import";
 import { supabase } from "../lib/supabase";
@@ -28,6 +29,7 @@ import {
   uploadCompanyLogo,
   updateRemoteOfferStatus,
   updateRemoteCatalogItem,
+  type UserCompanySummary,
 } from "../lib/oferte-data";
 import { taxIdHint } from "../lib/ro-validation";
 
@@ -108,7 +110,49 @@ type PdfColumns = {
 
 const defaultPdfColumns: PdfColumns = { unit: true, quantity: true, unitPriceWithoutVat: false, unitPrice: true, total: true, showDiscount: true };
 
-const DRAFT_KEY = "frizeo-oferte:draft:v2";
+const ACTIVE_COMPANY_KEY = "frizeo-oferte:active-company:v1";
+const DRAFT_KEY_PREFIX = "frizeo-oferte:draft:v2";
+const LEGACY_DRAFT_KEY = "frizeo-oferte:draft:v2";
+
+function draftStorageKey(companyId: string) {
+  return `${DRAFT_KEY_PREFIX}:${companyId}`;
+}
+
+function readCompanyDraft(companyId: string): Partial<SavedOffer> | null {
+  try {
+    const scoped = window.localStorage.getItem(draftStorageKey(companyId));
+    if (scoped) return JSON.parse(scoped) as Partial<SavedOffer>;
+    const legacy = window.localStorage.getItem(LEGACY_DRAFT_KEY);
+    if (legacy) {
+      window.localStorage.setItem(draftStorageKey(companyId), legacy);
+      window.localStorage.removeItem(LEGACY_DRAFT_KEY);
+      return JSON.parse(legacy) as Partial<SavedOffer>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function emptyEditorState(defaultWarranty = 24, defaultValidity = 30) {
+  return {
+    currentOfferId: null as string | null,
+    currentNumber: nextOfferNumber([]),
+    client: "",
+    clientDetails: emptyClientDetails,
+    title: "",
+    issueDate: today(),
+    validityDays: String(defaultValidity),
+    currency: "RON",
+    items: [] as OfferItem[],
+    labor: 0,
+    laborOptions: defaultLaborOptions,
+    discount: 0,
+    notes: `Garanție: ${defaultWarranty} luni\nValabilitate: ${defaultValidity} zile de la data întocmirii`,
+    currentStatus: "ciornă" as OfferStatus,
+    pdfColumns: defaultPdfColumns,
+  };
+}
 
 const initialClients: ClientRecord[] = [];
 
@@ -211,7 +255,11 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [addingCompany, setAddingCompany] = useState(false);
   const [dataReload, setDataReload] = useState(0);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [preferredCompanyId, setPreferredCompanyId] = useState<string | undefined>(undefined);
+  const [companies, setCompanies] = useState<UserCompanySummary[]>([]);
   const [view, setView] = useState<"home" | "editor" | "offers" | "clients" | "catalog" | "settings">("home");
   const [items, setItems] = useState(initialItems);
   const [client, setClient] = useState("");
@@ -264,23 +312,72 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    const saved = window.localStorage.getItem(ACTIVE_COMPANY_KEY);
+    setPreferredCompanyId(saved || undefined);
+    setPrefsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!user || !prefsLoaded) return;
     let cancelled = false;
-    loadBetaData(user.id, user.email ?? "")
+    setHydrated(false);
+    loadBetaData(user.id, user.email ?? "", preferredCompanyId)
       .then((data) => {
         if (cancelled) return;
         if (data.needsOnboarding || !data.company) {
           setNeedsOnboarding(true);
+          setCompanies([]);
           setHydrated(false);
           return;
         }
         setNeedsOnboarding(false);
+        setAddingCompany(false);
+        setCompanies(data.companies);
         setSavedOffers(data.offers);
         setClients(data.clients);
         setCompanySettings({ ...data.company, logoUrl: companyLogoUrl(data.company.logoPath) });
         setBaseCatalog(data.catalog);
         setCustomCatalog([]);
-        setCurrentNumber(nextOfferNumber(data.offers));
+        window.localStorage.setItem(ACTIVE_COMPANY_KEY, data.company.id);
+        const draft = readCompanyDraft(data.company.id);
+        if (draft) {
+          setCurrentOfferId(draft.id ?? null);
+          setCurrentNumber(draft.number || nextOfferNumber(data.offers));
+          setClient(draft.client ?? "");
+          setClientDetails(draft.clientDetails ?? emptyClientDetails);
+          setTitle(draft.title ?? "");
+          setIssueDate(draft.issueDate || today());
+          setValidityDays(draft.validityDays || String(data.company.defaultValidity));
+          setCurrency(draft.currency || "RON");
+          setItems(draft.items ?? []);
+          setLabor(draft.labor ?? 0);
+          setLaborOptions(draft.laborOptions ?? defaultLaborOptions);
+          setDiscount(draft.discount ?? 0);
+          setNotes(draft.notes || `Garanție: ${data.company.defaultWarranty} luni\nValabilitate: ${data.company.defaultValidity} zile de la data întocmirii`);
+          setCurrentStatus(draft.status ?? "ciornă");
+          setPdfColumns(draft.pdfColumns ?? defaultPdfColumns);
+          setSavedSignature(offerSignature(draft));
+          setView("home");
+        } else {
+          const empty = emptyEditorState(data.company.defaultWarranty, data.company.defaultValidity);
+          setCurrentOfferId(empty.currentOfferId);
+          setCurrentNumber(nextOfferNumber(data.offers));
+          setClient(empty.client);
+          setClientDetails(empty.clientDetails);
+          setTitle(empty.title);
+          setIssueDate(empty.issueDate);
+          setValidityDays(empty.validityDays);
+          setCurrency(empty.currency);
+          setItems(empty.items);
+          setLabor(empty.labor);
+          setLaborOptions(empty.laborOptions);
+          setDiscount(empty.discount);
+          setNotes(empty.notes);
+          setCurrentStatus(empty.currentStatus);
+          setPdfColumns(empty.pdfColumns);
+          setSavedSignature("");
+          setView("home");
+        }
         setSaveMessage("Sincronizat cu Supabase");
         setHydrated(true);
       })
@@ -289,7 +386,7 @@ export default function Home() {
         setSaveMessage(`Eroare Supabase: ${error.message}`);
       });
     return () => { cancelled = true; };
-  }, [user, dataReload]);
+  }, [user, dataReload, preferredCompanyId, prefsLoaded]);
 
   useEffect(() => {
     if (!hydrated || !user) return;
@@ -318,7 +415,7 @@ export default function Home() {
   }, [isDirty]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !companySettings.id) return;
     const draft: Partial<SavedOffer> = {
       id: currentOfferId ?? undefined,
       number: currentNumber,
@@ -326,8 +423,8 @@ export default function Home() {
       status: currentStatus,
       updatedAt: new Date().toISOString(),
     };
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [hydrated, currentOfferId, currentNumber, client, clientDetails, title, issueDate, validityDays, currency, items, labor, laborOptions, discount, notes, pdfColumns, currentStatus]);
+    localStorage.setItem(draftStorageKey(companySettings.id), JSON.stringify(draft));
+  }, [hydrated, companySettings.id, currentOfferId, currentNumber, client, clientDetails, title, issueDate, validityDays, currency, items, labor, laborOptions, discount, notes, pdfColumns, currentStatus]);
 
   const catalog = useMemo(() => [...customCatalog, ...baseCatalog], [customCatalog, baseCatalog]);
   const activeCatalog = useMemo(() => catalog.filter((item) => item.active), [catalog]);
@@ -482,7 +579,7 @@ export default function Home() {
       setCurrentOfferId(id);
       setCurrentNumber(number);
       setSavedSignature(offerSignature(offer));
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(offer));
+      localStorage.setItem(draftStorageKey(companySettings.id), JSON.stringify(offer));
       const additions = [clientAdded ? "client nou" : "", newCatalogItems.length ? `${newCatalogItems.length} articole în catalog` : ""].filter(Boolean);
       setSaveMessage(`Salvat în Supabase la ${new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" })}${additions.length ? ` · adăugat: ${additions.join(", ")}` : ""}`);
     } catch (error) {
@@ -541,7 +638,7 @@ export default function Home() {
     setCurrentStatus("ciornă");
     setPdfColumns(defaultPdfColumns);
     setNotes(`Garanție: ${companySettings.defaultWarranty} luni\nValabilitate: ${companySettings.defaultValidity} zile de la data întocmirii`);
-    localStorage.removeItem(DRAFT_KEY);
+    if (companySettings.id) localStorage.removeItem(draftStorageKey(companySettings.id));
     setSavedSignature("");
     setView("editor");
   }
@@ -823,12 +920,40 @@ export default function Home() {
     });
   }
 
+  function switchCompany(companyId: string) {
+    if (!companyId || companyId === companySettings.id) return;
+    if (isDirty && !window.confirm("Ai modificări nesalvate la oferta curentă. Schimbi firma oricum?")) return;
+    setHydrated(false);
+    setView("home");
+    setSaveMessage("Se încarcă firma…");
+    window.localStorage.setItem(ACTIVE_COMPANY_KEY, companyId);
+    setPreferredCompanyId(companyId);
+  }
+
+  function startAddCompany() {
+    if (isDirty && !window.confirm("Ai modificări nesalvate. Continui cu adăugarea unei firme noi?")) return;
+    setAddingCompany(true);
+  }
+
+  function finishCompanySetup(companyId: string) {
+    window.localStorage.setItem(ACTIVE_COMPANY_KEY, companyId);
+    setPreferredCompanyId(companyId);
+    setNeedsOnboarding(false);
+    setAddingCompany(false);
+    setHydrated(false);
+    setSaveMessage("Se pregătește firma…");
+    setDataReload((value) => value + 1);
+  }
+
   if (authLoading) {
     return <main className="auth-page"><section className="auth-card"><h1>Se verifică sesiunea…</h1></section></main>;
   }
   if (!user) return <AuthScreen />;
   if (needsOnboarding) {
-    return <CompanyOnboarding user={user} onComplete={() => { setNeedsOnboarding(false); setSaveMessage("Se pregătește firma…"); setDataReload((value) => value + 1); }} />;
+    return <CompanyOnboarding user={user} mode="initial" onComplete={finishCompanySetup} />;
+  }
+  if (addingCompany) {
+    return <CompanyOnboarding user={user} mode="add" onComplete={finishCompanySetup} onCancel={() => setAddingCompany(false)} />;
   }
   if (!hydrated) {
     return <main className="auth-page"><section className="auth-card"><h1>Pregătim Frizeo Oferte…</h1><p>{saveMessage}</p></section></main>;
@@ -841,6 +966,12 @@ export default function Home() {
           <div className="brand-mark">F</div>
           <div><strong>Frizeo Oferte</strong><span>{companySettings.name}</span></div>
         </div>
+        <CompanySwitcher
+          companies={companies}
+          activeCompanyId={companySettings.id}
+          onSwitch={switchCompany}
+          onAdd={startAddCompany}
+        />
         <nav aria-label="Navigare principală">
           <button className={view === "home" ? "active" : ""} onClick={() => navigate("home")}><Icon>⌂</Icon>Acasă</button>
           <button className={view === "offers" ? "active" : ""} onClick={() => navigate("offers")}><Icon>▤</Icon>Oferte <span className="count">{savedOffers.length}</span></button>
@@ -849,8 +980,8 @@ export default function Home() {
           <button className={view === "settings" ? "active" : ""} onClick={() => navigate("settings")}><Icon>⚙</Icon>Setări firmă</button>
         </nav>
         <div className="company-card">
-          <span className="company-avatar">{companySettings.name.slice(0, 2).toUpperCase()}</span>
-          <div><strong>{companySettings.name}</strong><small>{companySettings.taxId ? `CUI ${companySettings.taxId}` : user.email}</small></div>
+          <span className="company-avatar">{(companySettings.name || "F").slice(0, 2).toUpperCase()}</span>
+          <div><strong>{companySettings.name || "Firmă"}</strong><small>{companySettings.taxId ? `CUI ${companySettings.taxId}` : user.email}</small></div>
           <button className="logout-button" onClick={() => supabase.auth.signOut()} title="Ieșire">↪</button>
         </div>
       </aside>

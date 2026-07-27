@@ -34,6 +34,12 @@ nav button:hover, nav button.active { color: #fff; background: #29354c; }
 .company-card strong, .company-card small { display: block; }
 .company-card strong { font-size: 12px; }
 .company-card small { color: #8f9aaf; margin-top: 3px; font-size: 10px; }
+.company-switcher { display: grid; gap: 8px; padding: 16px 8px 4px; border-bottom: 1px solid #2e3950; }
+.company-switcher label { display: grid; gap: 6px; }
+.company-switcher label span { color: #8f9aaf; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.company-switcher select { width: 100%; height: 36px; border-radius: 8px; border: 1px solid #3a4660; background: #222c41; color: #fff; padding: 0 10px; font-size: 12px; }
+.add-company-button { border: 1px dashed #4a5875; background: transparent; color: #c5d0e4; border-radius: 8px; padding: 8px 10px; font-size: 11px; font-weight: 700; text-align: left; }
+.add-company-button:hover { border-color: #facc15; color: #fff; }
 
 .workspace { margin-left: 238px; width: calc(100% - 238px); }
 .topbar { background: #fff; border-bottom: 1px solid var(--line); padding: 22px 28px; display: flex; align-items: end; justify-content: space-between; position: sticky; top: 0; z-index: 5; }
@@ -295,6 +301,7 @@ table { border-collapse: collapse; width: 100%; }
   .brand { padding-inline: 5px; }
   .brand > div:last-child, nav button:not(.active) span:not(.nav-icon), nav button { font-size: 0; }
   .brand-mark { width: 38px; flex: none; }
+  .company-switcher { display: none; }
   nav button { justify-content: center; padding: 11px; }
   nav button.active .count, .company-card > div, .company-card > span:last-child { display: none; }
   .company-card { grid-template-columns: 1fr; padding-inline: 8px; }
