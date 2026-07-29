@@ -1,5 +1,35 @@
 import { supabase } from "./supabase";
 
+type SupabaseLikeError = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+};
+
+export function formatDataError(error: unknown, fallback = "Operația a eșuat.") {
+  const err = error as SupabaseLikeError;
+  const message = err?.message || (error instanceof Error ? error.message : fallback);
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("row-level security")
+    || lower.includes("permission denied")
+    || err?.code === "42501"
+    || err?.code === "PGRST301"
+  ) {
+    return `Acces refuzat la baza de date (${err?.code || "RLS"}). Rulează migrarea 20260729_fix_offer_save_rls în Supabase SQL Editor. Detaliu: ${message}`;
+  }
+  if (err?.code === "PGRST202" || lower.includes("could not find the function")) {
+    return `Funcția next_offer_number lipsește sau e învechită. Rulează migrarea 20260729_fix_offer_save_rls în Supabase. Detaliu: ${message}`;
+  }
+  const extras = [err?.code, err?.details, err?.hint].filter(Boolean).join(" · ");
+  return extras ? `${message} (${extras})` : message;
+}
+
+function throwDataError(error: unknown): never {
+  throw new Error(formatDataError(error));
+}
+
 export type RemoteCatalogItem = {
   id: string;
   code: string;
@@ -141,7 +171,7 @@ export async function listUserCompanies(userId: string): Promise<UserCompanySumm
     .select("role, company_id, created_at, companies(id, name, industry, tax_id)")
     .eq("user_id", userId)
     .order("created_at");
-  if (result.error) throw result.error;
+  if (result.error) throwDataError(result.error);
 
   return (result.data ?? []).flatMap((row) => {
     const company = Array.isArray(row.companies) ? row.companies[0] : row.companies;
@@ -156,11 +186,72 @@ export async function listUserCompanies(userId: string): Promise<UserCompanySumm
   });
 }
 
+/** Fallback when company_members is empty or inaccessible: companies owned by the user. */
+export async function listOwnedCompanies(userId: string): Promise<UserCompanySummary[]> {
+  const owned = await supabase
+    .from("companies")
+    .select("id, name, industry, tax_id, created_at")
+    .eq("owner_id", userId)
+    .order("created_at");
+  if (owned.error) throwDataError(owned.error);
+  return (owned.data ?? []).map((company) => ({
+    id: String(company.id),
+    name: String(company.name ?? "Firmă"),
+    industry: String(company.industry ?? "other"),
+    taxId: String(company.tax_id ?? ""),
+    role: "owner",
+  }));
+}
+
+/** Repairs missing owner→member links (common after multi-company migration). */
+export async function ensureOwnerMemberships() {
+  const rpc = await supabase.rpc("ensure_owner_memberships");
+  if (!rpc.error) return Number(rpc.data ?? 0);
+
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throwDataError(userError);
+  const userId = userData.user?.id;
+  if (!userId) return 0;
+
+  const owned = await listOwnedCompanies(userId);
+  if (!owned.length) return 0;
+
+  let repaired = 0;
+  for (const company of owned) {
+    const membership = await supabase.from("company_members").upsert(
+      { company_id: company.id, user_id: userId, role: "owner" },
+      { onConflict: "company_id,user_id" },
+    );
+    if (!membership.error) {
+      repaired += 1;
+      continue;
+    }
+    // Some projects only allow insert, not upsert conflict target.
+    const inserted = await supabase.from("company_members").insert({
+      company_id: company.id,
+      user_id: userId,
+      role: "owner",
+    });
+    if (!inserted.error) repaired += 1;
+  }
+  return repaired;
+}
+
 export async function loadBetaData(userId: string, email: string, preferredCompanyId?: string | null) {
   const profileResult = await supabase.from("profiles").upsert({ id: userId, email }, { onConflict: "id" });
-  if (profileResult.error) throw profileResult.error;
+  if (profileResult.error) throwDataError(profileResult.error);
 
-  const companies = await listUserCompanies(userId);
+  await ensureOwnerMemberships().catch(() => 0);
+
+  let companies: UserCompanySummary[] = [];
+  try {
+    companies = await listUserCompanies(userId);
+  } catch {
+    companies = [];
+  }
+  if (!companies.length) {
+    companies = await listOwnedCompanies(userId).catch(() => []);
+  }
   if (!companies.length) {
     return {
       needsOnboarding: true as const,
@@ -175,17 +266,25 @@ export async function loadBetaData(userId: string, email: string, preferredCompa
   const selectedSummary = companies.find((company) => company.id === preferredCompanyId) ?? companies[0];
   const companyId = selectedSummary.id;
 
+  let companyRow: Record<string, unknown> | null = null;
   const membership = await supabase
     .from("company_members")
     .select("company_id, role, companies(*)")
     .eq("user_id", userId)
     .eq("company_id", companyId)
     .maybeSingle();
-  if (membership.error) throw membership.error;
-  const companyRow = Array.isArray(membership.data?.companies)
-    ? membership.data?.companies[0]
-    : membership.data?.companies;
-  if (!membership.data || !companyRow) {
+  if (!membership.error) {
+    const nested = Array.isArray(membership.data?.companies)
+      ? membership.data?.companies[0]
+      : membership.data?.companies;
+    if (nested) companyRow = nested as Record<string, unknown>;
+  }
+  if (!companyRow) {
+    const direct = await supabase.from("companies").select("*").eq("id", companyId).maybeSingle();
+    if (direct.error) throwDataError(direct.error);
+    companyRow = (direct.data as Record<string, unknown> | null) ?? null;
+  }
+  if (!companyRow) {
     return {
       needsOnboarding: true as const,
       company: null,
@@ -197,7 +296,7 @@ export async function loadBetaData(userId: string, email: string, preferredCompa
   }
 
   let catalogResult = await supabase.from("catalog_items").select("*").eq("company_id", companyId).order("category").order("name");
-  if (catalogResult.error) throw catalogResult.error;
+  if (catalogResult.error) throwDataError(catalogResult.error);
   if (!catalogResult.data?.length) {
     const catalogFile = companyRow.industry === "windows_doors"
       ? "/catalog-windows-doors.json"
@@ -222,7 +321,7 @@ export async function loadBetaData(userId: string, email: string, preferredCompa
     }));
     if (rows.length) {
       const seeded = await supabase.from("catalog_items").insert(rows).select("*");
-      if (seeded.error) throw seeded.error;
+      if (seeded.error) throwDataError(seeded.error);
       catalogResult = seeded;
     }
   }
@@ -231,8 +330,8 @@ export async function loadBetaData(userId: string, email: string, preferredCompa
     supabase.from("clients").select("*").eq("company_id", companyId).order("name"),
     supabase.from("offers").select("*, offer_items(*)").eq("company_id", companyId).order("updated_at", { ascending: false }),
   ]);
-  if (clientsResult.error) throw clientsResult.error;
-  if (offersResult.error) throw offersResult.error;
+  if (clientsResult.error) throwDataError(clientsResult.error);
+  if (offersResult.error) throwDataError(offersResult.error);
 
   const company = mapCompany(companyRow as Record<string, unknown>, companyId);
   const clients: RemoteClient[] = (clientsResult.data ?? []).map((row) => ({
@@ -316,12 +415,12 @@ export async function syncClients(userId: string, companyId: string, clients: Re
     email: client.email,
     updated_at: new Date().toISOString(),
   })));
-  if (result.error) throw result.error;
+  if (result.error) throwDataError(result.error);
 }
 
 export async function deleteRemoteClient(id: string) {
   const result = await supabase.from("clients").delete().eq("id", id);
-  if (result.error) throw result.error;
+  if (result.error) throwDataError(result.error);
 }
 
 export async function syncCompany(userId: string, settings: RemoteCompany) {
@@ -344,7 +443,7 @@ export async function syncCompany(userId: string, settings: RemoteCompany) {
     onboarding_completed: true,
     updated_at: new Date().toISOString(),
   }).eq("id", settings.id);
-  if (result.error) throw result.error;
+  if (result.error) throwDataError(result.error);
 }
 
 export async function saveRemoteOffer(
@@ -373,10 +472,10 @@ export async function saveRemoteOffer(
     status: offer.status,
     updated_at: offer.updatedAt,
   }).select("id").single();
-  if (saved.error) throw saved.error;
+  if (saved.error) throwDataError(saved.error);
 
   const removed = await supabase.from("offer_items").delete().eq("offer_id", offer.id);
-  if (removed.error) throw removed.error;
+  if (removed.error) throwDataError(removed.error);
   if (offer.items.length) {
     const inserted = await supabase.from("offer_items").insert(offer.items.map((item, index) => ({
       offer_id: offer.id,
@@ -391,13 +490,13 @@ export async function saveRemoteOffer(
       unit_price: item.unitPrice,
       vat_rate: item.vatRate,
     })));
-    if (inserted.error) throw inserted.error;
+    if (inserted.error) throwDataError(inserted.error);
   }
 }
 
 export async function deleteRemoteOffer(id: string) {
   const result = await supabase.from("offers").delete().eq("id", id);
-  if (result.error) throw result.error;
+  if (result.error) throwDataError(result.error);
 }
 
 export async function updateRemoteOfferStatus(id: string, status: RemoteOffer["status"]) {
@@ -407,7 +506,7 @@ export async function updateRemoteOfferStatus(id: string, status: RemoteOffer["s
     .eq("id", id)
     .select("id, status")
     .single();
-  if (result.error) throw result.error;
+  if (result.error) throwDataError(result.error);
   return result.data;
 }
 
@@ -429,14 +528,38 @@ export async function addRemoteCatalogItems(userId: string, companyId: string, i
     source_type: item.sourceType,
     active: item.active,
   }))).select("*");
-  if (result.error) throw result.error;
+  if (result.error) throwDataError(result.error);
   return (result.data ?? []).map((row) => mapCatalog(row));
 }
 
-export async function allocateOfferNumber(year: number, companyId: string) {
+export async function allocateOfferNumber(year: number, companyId: string, offerPrefix = "OF") {
   const result = await supabase.rpc("next_offer_number", { p_year: year, p_company_id: companyId });
-  if (result.error) throw result.error;
-  return String(result.data);
+  if (!result.error && result.data) return String(result.data);
+
+  // Works without SQL / offer_sequences access: derive next number from existing offers.
+  const existing = await supabase.from("offers").select("number").eq("company_id", companyId);
+  if (existing.error) {
+    // Last resort: also try owner-scoped legacy rows if company filter is blocked.
+    const legacy = await supabase.from("offers").select("number");
+    if (legacy.error) throwDataError(result.error || existing.error);
+    return nextNumberFromList(legacy.data ?? [], year, offerPrefix);
+  }
+  return nextNumberFromList(existing.data ?? [], year, offerPrefix);
+}
+
+function nextNumberFromList(
+  rows: Array<{ number?: string | null }>,
+  year: number,
+  offerPrefix: string,
+) {
+  let max = 0;
+  for (const row of rows) {
+    const value = String(row.number ?? "");
+    const match = value.match(new RegExp(`(?:^|-)${year}-(\\d+)$`)) || value.match(/-(\d+)$/);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  const prefix = (offerPrefix || "OF").replace(/[^A-Z0-9]/gi, "").toUpperCase() || "OF";
+  return `${prefix}-${year}-${String(max + 1).padStart(3, "0")}`;
 }
 
 export async function createCompanyForUser(
@@ -445,7 +568,7 @@ export async function createCompanyForUser(
   input: { name: string; industry: string; taxId?: string; phone?: string },
 ) {
   const profile = await supabase.from("profiles").upsert({ id: userId, email }, { onConflict: "id" });
-  if (profile.error) throw profile.error;
+  if (profile.error) throwDataError(profile.error);
   const inserted = await supabase.from("companies").insert({
     owner_id: userId,
     name: input.name,
@@ -457,7 +580,7 @@ export async function createCompanyForUser(
     default_validity: 30,
     onboarding_completed: true,
   }).select("*").single();
-  if (inserted.error) throw inserted.error;
+  if (inserted.error) throwDataError(inserted.error);
   const membership = await supabase.from("company_members").insert({
     company_id: inserted.data.id,
     user_id: userId,
@@ -465,7 +588,7 @@ export async function createCompanyForUser(
   });
   if (membership.error) {
     await supabase.from("companies").delete().eq("id", inserted.data.id);
-    throw membership.error;
+    throwDataError(membership.error);
   }
   return String(inserted.data.id);
 }
@@ -477,7 +600,7 @@ export async function uploadCompanyLogo(companyId: string, file: File) {
     upsert: true,
     contentType: file.type,
   });
-  if (upload.error) throw upload.error;
+  if (upload.error) throwDataError(upload.error);
   return path;
 }
 
@@ -502,11 +625,11 @@ export async function updateRemoteCatalogItem(item: RemoteCatalogItem) {
     active: item.active,
     updated_at: new Date().toISOString(),
   }).eq("id", item.id).select("*").single();
-  if (result.error) throw result.error;
+  if (result.error) throwDataError(result.error);
   return mapCatalog(result.data);
 }
 
 export async function deleteRemoteCatalogItem(id: string) {
   const result = await supabase.from("catalog_items").delete().eq("id", id);
-  if (result.error) throw result.error;
+  if (result.error) throwDataError(result.error);
 }

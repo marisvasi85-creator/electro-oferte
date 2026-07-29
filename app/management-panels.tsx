@@ -109,9 +109,11 @@ type SettingsViewProps = {
   settings: CompanySettings;
   onChange: (settings: CompanySettings) => void;
   onLogoUpload?: (file: File) => Promise<void>;
+  onRepairAccess?: () => Promise<void>;
+  repairMessage?: string;
 };
 
-export function SettingsView({ settings, onChange, onLogoUpload }: SettingsViewProps) {
+export function SettingsView({ settings, onChange, onLogoUpload, onRepairAccess, repairMessage }: SettingsViewProps) {
   function update(field: keyof CompanySettings, value: string) {
     onChange({
       ...settings,
@@ -164,6 +166,13 @@ export function SettingsView({ settings, onChange, onLogoUpload }: SettingsViewP
             <label>Valabilitate implicită<input type="number" min="1" value={settings.defaultValidity} onChange={(event) => update("defaultValidity", event.target.value)} /><span className="field-suffix">zile</span></label>
           </div>
         </section>
+        {onRepairAccess && (
+          <section className="card settings-card">
+            <div className="section-heading"><span className="step">5</span><div><h2>Acces și sincronizare</h2><p>Dacă salvarea ofertei eșuează pe un dispozitiv nou, repară legătura cu firma</p></div></div>
+            <button type="button" className="secondary" onClick={() => void onRepairAccess()}>Repară accesul firmei</button>
+            {repairMessage && <p className="field-hint" style={{ marginTop: 12 }}>{repairMessage}</p>}
+          </section>
+        )}
         <aside className="settings-preview card">
           <span className="eyebrow">ANTET DOCUMENT</span>
           {settings.logoUrl && <Image unoptimized width={180} height={90} className="settings-logo-preview" src={settings.logoUrl} alt="" />}
