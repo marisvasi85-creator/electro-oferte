@@ -54,6 +54,8 @@ test("uses the public Supabase client and company-scoped persistence", async () 
   assert.match(data, /company_members/);
   assert.match(data, /listUserCompanies/);
   assert.match(data, /preferredCompanyId/);
+  assert.match(data, /ensureOwnerMemberships/);
+  assert.match(data, /formatDataError/);
 });
 
 test("ships Romanian validation, security headers and legal pages", async () => {
