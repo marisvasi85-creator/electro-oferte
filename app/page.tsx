@@ -22,6 +22,7 @@ import {
   deleteRemoteClient,
   deleteRemoteCatalogItem,
   deleteRemoteOffer,
+  ensureOwnerMemberships,
   loadBetaData,
   saveRemoteOffer,
   syncClients,
@@ -290,6 +291,7 @@ export default function Home() {
   const [clients, setClients] = useState<ClientRecord[]>(initialClients);
   const [companySettings, setCompanySettings] = useState<CompanySettings>(initialCompanySettings);
   const [offerSearch, setOfferSearch] = useState("");
+  const [repairMessage, setRepairMessage] = useState("");
   const legacyOfferInput = useRef<HTMLInputElement>(null);
   const [savedSignature, setSavedSignature] = useState("");
   const currentSignature = useMemo(() => offerSignature({
@@ -525,7 +527,11 @@ export default function Home() {
     try {
       const number = currentOfferId
         ? currentNumber
-        : await allocateOfferNumber(Number(issueDate.slice(0, 4)) || new Date().getFullYear(), companySettings.id);
+        : await allocateOfferNumber(
+          Number(issueDate.slice(0, 4)) || new Date().getFullYear(),
+          companySettings.id,
+          companySettings.offerPrefix || "OF",
+        );
       const offer: SavedOffer = {
         id, number, client, clientDetails, title, issueDate, validityDays, currency, items, labor, laborOptions, discount, notes, pdfColumns,
         status: currentStatus,
@@ -720,6 +726,20 @@ export default function Home() {
     if (!user) throw new Error("Sesiunea nu este disponibilă.");
     const inserted = await addRemoteCatalogItems(user.id, companySettings.id, entries);
     setBaseCatalog((current) => [...inserted, ...current]);
+  }
+
+  async function repairCompanyAccess() {
+    setRepairMessage("Se repară accesul…");
+    try {
+      const repaired = await ensureOwnerMemberships();
+      setRepairMessage(repaired > 0
+        ? `Acces reparat pentru ${repaired} firmă/firme. Reîncarcă datele…`
+        : "Nu a fost nevoie de reparații (sau nu ai firme pe owner). Reîncarc…");
+      setHydrated(false);
+      setDataReload((value) => value + 1);
+    } catch (error) {
+      setRepairMessage((error as Error).message);
+    }
   }
 
   async function handleLogoUpload(file: File) {
@@ -1031,7 +1051,13 @@ export default function Home() {
         ) : view === "catalog" ? (
           <CatalogManager items={catalog} onSave={saveCatalogItem} onDelete={removeCatalogItem} onImport={importCatalogItems} onBack={() => setView("home")} />
         ) : view === "settings" ? (
-          <SettingsView settings={companySettings} onChange={setCompanySettings} onLogoUpload={handleLogoUpload} />
+          <SettingsView
+            settings={companySettings}
+            onChange={setCompanySettings}
+            onLogoUpload={handleLogoUpload}
+            onRepairAccess={repairCompanyAccess}
+            repairMessage={repairMessage}
+          />
         ) : view === "offers" ? (
           <>
             <header className="topbar">
