@@ -56,6 +56,7 @@ test("uses the public Supabase client and company-scoped persistence", async () 
   assert.match(data, /preferredCompanyId/);
   assert.match(data, /ensureOwnerMemberships/);
   assert.match(data, /formatDataError/);
+  assert.match(data, /saveRemoteOfferViaApi|\/api\/save-offer/);
   assert.match(data, /listOwnedCompanies/);
   assert.match(data, /nextNumberFromList|allocateOfferNumber/);
 });

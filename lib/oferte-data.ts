@@ -452,6 +452,23 @@ export async function saveRemoteOffer(
   offer: RemoteOffer,
   clientId: string | null,
 ) {
+  try {
+    await saveRemoteOfferDirect(userId, companyId, offer, clientId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/permission denied|row-level security|Acces refuzat|42501/i.test(message)) {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+    await saveRemoteOfferViaApi(companyId, offer, clientId);
+  }
+}
+
+async function saveRemoteOfferDirect(
+  userId: string,
+  companyId: string,
+  offer: RemoteOffer,
+  clientId: string | null,
+) {
   const saved = await supabase.from("offers").upsert({
     id: offer.id,
     owner_id: userId,
@@ -491,6 +508,30 @@ export async function saveRemoteOffer(
       vat_rate: item.vatRate,
     })));
     if (inserted.error) throwDataError(inserted.error);
+  }
+}
+
+async function saveRemoteOfferViaApi(
+  companyId: string,
+  offer: RemoteOffer,
+  clientId: string | null,
+) {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throwDataError(sessionError);
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error("Sesiunea a expirat. Autentifică-te din nou.");
+
+  const response = await fetch("/api/save-offer", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ companyId, clientId, offer }),
+  });
+  const payload = await response.json().catch(() => ({} as { error?: string }));
+  if (!response.ok) {
+    throw new Error(payload.error || `Salvarea prin API a eșuat (${response.status}).`);
   }
 }
 
