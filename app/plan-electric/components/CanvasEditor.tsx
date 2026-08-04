@@ -31,6 +31,7 @@ type CanvasEditorProps = {
   onPanBy: (dx: number, dy: number) => void;
   onDropSymbol: (type: SymbolType, x: number, y: number) => void;
   onCalibrationClick: (x: number, y: number) => void;
+  onLedLengthChange: (id: string, lengthPx: number, commit?: boolean) => void;
   stageRef: React.MutableRefObject<Konva.Stage | null>;
 };
 
@@ -58,6 +59,7 @@ export function CanvasEditor({
   onPanBy,
   onDropSymbol,
   onCalibrationClick,
+  onLedLengthChange,
   stageRef,
 }: CanvasEditorProps) {
   const background = useHtmlImage(backgroundUrl);
@@ -245,6 +247,7 @@ export function CanvasEditor({
               y={symbol.y}
               rotation={symbol.rotation}
               scale={symbol.scale}
+              metadata={symbol.metadata}
               selected={symbol.id === selectedId}
               draggable={!forcePan && !calibrating && !isPanning}
               onClick={() => {
@@ -255,6 +258,7 @@ export function CanvasEditor({
                 const snapped = snapPoint(x, y, guides, snapEnabled);
                 onMove(symbol.id, snapped.x, snapped.y);
               }}
+              onLedLengthChange={(lengthPx, commit) => onLedLengthChange(symbol.id, lengthPx, commit)}
             />
           ))}
           {calibrationPoints.map((point, index) => (

@@ -70,6 +70,7 @@ export type SymbolCategory = "prize" | "intrerupatoare" | "iluminat" | "diverse"
 export type SymbolType =
   | "priza_simpla"
   | "priza_dubla"
+  | "priza_tripla"
   | "priza_ip54"
   | "priza_tv"
   | "priza_data"

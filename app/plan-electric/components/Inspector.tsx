@@ -98,6 +98,32 @@ export function Inspector({ symbol, settings, onChange, onDelete, onDuplicate }:
           onChange={(event) => onChange({ scale: Number(event.target.value) || 1 })}
         />
       </label>
+      {symbol.symbolType === "led" && (
+        <label>
+          Lungime bandă LED (px)
+          <input
+            type="number"
+            min={40}
+            max={4000}
+            step={10}
+            value={typeof symbol.metadata?.ledLengthPx === "number" ? symbol.metadata.ledLengthPx : 120}
+            onChange={(event) => {
+              const value = Number(event.target.value) || 120;
+              onChange({
+                metadata: {
+                  ...symbol.metadata,
+                  ledLengthPx: Math.min(4000, Math.max(40, value)),
+                },
+              });
+            }}
+          />
+        </label>
+      )}
+      {symbol.symbolType === "led" && (
+        <p className="pe-muted pe-cable-hint">
+          Selectează banda și trage mânerele albastre de la capete ca să o lungești.
+        </p>
+      )}
       <div className="pe-inspector-actions">
         <button type="button" onClick={onDuplicate}>Duplică</button>
         <button type="button" className="danger" onClick={onDelete}>Șterge</button>

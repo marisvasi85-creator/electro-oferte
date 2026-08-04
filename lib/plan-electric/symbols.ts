@@ -1,13 +1,27 @@
 import type { SymbolCategory, SymbolDefinition, SymbolType } from "./types";
 
+/** Color coding for plan readability. */
+export const SYMBOL_COLORS = {
+  outlet: "#dc2626",
+  fixtureGreen: "#16a34a",
+  led: "#eab308",
+  ledBulb: "#facc15",
+  default: "#0f172a",
+} as const;
+
+export const DEFAULT_LED_LENGTH_PX = 120;
+export const MIN_LED_LENGTH_PX = 40;
+export const MAX_LED_LENGTH_PX = 4000;
+
 /**
  * Library labels follow Romanian installation drawing practice
  * (SR EN 60617 / planuri de amplasament).
  * Sizes are kept compact so symbols sit correctly on architectural plans.
  */
 export const SYMBOL_LIBRARY: SymbolDefinition[] = [
-  { type: "priza_simpla", category: "prize", label: "Priză 2P+T", legend: "Priză 2P+T", width: 16, height: 16 },
-  { type: "priza_dubla", category: "prize", label: "Priză dublă 2P+T", legend: "Priză dublă", width: 24, height: 16 },
+  { type: "priza_simpla", category: "prize", label: "Priză simplă", legend: "Priză simplă", width: 16, height: 16 },
+  { type: "priza_dubla", category: "prize", label: "Priză dublă", legend: "Priză dublă", width: 24, height: 16 },
+  { type: "priza_tripla", category: "prize", label: "Priză triplă", legend: "Priză triplă", width: 34, height: 16 },
   { type: "priza_ip54", category: "prize", label: "Priză IP54", legend: "Priză IP54", width: 18, height: 18 },
   { type: "priza_tv", category: "prize", label: "Priză TV", legend: "Priză TV", width: 16, height: 16 },
   { type: "priza_data", category: "prize", label: "Priză date (RJ45)", legend: "Priză date", width: 16, height: 16 },
@@ -48,4 +62,17 @@ export function getSymbolDefinition(type: SymbolType): SymbolDefinition {
 
 export function symbolsByCategory(category: SymbolCategory) {
   return SYMBOL_LIBRARY.filter((item) => item.category === category);
+}
+
+export function resolveLedLengthPx(metadata: Record<string, unknown> | undefined): number {
+  const value = metadata?.ledLengthPx;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.min(MAX_LED_LENGTH_PX, Math.max(MIN_LED_LENGTH_PX, value));
+  }
+  return DEFAULT_LED_LENGTH_PX;
+}
+
+export function clampLedLengthPx(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_LED_LENGTH_PX;
+  return Math.min(MAX_LED_LENGTH_PX, Math.max(MIN_LED_LENGTH_PX, Math.round(value)));
 }
