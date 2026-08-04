@@ -3,7 +3,9 @@ import type { SymbolCategory, SymbolDefinition, SymbolType } from "./types";
 /** Color coding for plan readability. */
 export const SYMBOL_COLORS = {
   outlet: "#dc2626",
+  switch: "#2563eb",
   fixtureGreen: "#16a34a",
+  panel: "#dc2626",
   led: "#eab308",
   ledBulb: "#facc15",
   default: "#0f172a",

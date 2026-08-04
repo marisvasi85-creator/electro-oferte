@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Group, Circle, Line, Rect, Text, Arc, RegularPolygon } from "react-konva";
 import type { SymbolType } from "../../../lib/plan-electric/types";
 import {
@@ -38,6 +39,7 @@ export function SymbolShape({
   onDragEnd,
   onLedLengthChange,
 }: SymbolShapeProps) {
+  const [resizingLed, setResizingLed] = useState(false);
   const def = getSymbolDefinition(type);
   const ledLength = resolveLedLengthPx(metadata);
   const w = type === "led" ? ledLength : def.width;
@@ -51,7 +53,7 @@ export function SymbolShape({
       rotation={rotation}
       scaleX={scale}
       scaleY={scale}
-      draggable={draggable}
+      draggable={draggable && !resizingLed}
       onClick={onClick}
       onTap={onClick}
       onDragEnd={(event) => onDragEnd?.(event.target.x(), event.target.y())}
@@ -75,6 +77,8 @@ export function SymbolShape({
           height={h}
           selected={selected}
           onLengthChange={onLedLengthChange}
+          onResizeStart={() => setResizingLed(true)}
+          onResizeEnd={() => setResizingLed(false)}
         />
       ) : (
         renderGlyph(type, w, h, sw)
@@ -90,6 +94,7 @@ function renderGlyph(type: SymbolType, w: number, h: number, sw: number) {
   const font = Math.max(4, Math.min(w, h) * 0.32);
   const outlet = SYMBOL_COLORS.outlet;
   const green = SYMBOL_COLORS.fixtureGreen;
+  const panel = SYMBOL_COLORS.panel;
   const ink = SYMBOL_COLORS.default;
 
   switch (type) {
@@ -184,18 +189,18 @@ function renderGlyph(type: SymbolType, w: number, h: number, sw: number) {
     case "corp_iluminat":
       return (
         <>
-          <Circle x={cx} y={cy} radius={r} stroke={ink} strokeWidth={sw} fill={FILL} />
-          <Line points={[cx, cy - r * 0.9, cx, cy + r * 0.9]} stroke={ink} strokeWidth={sw * 0.9} />
-          <Line points={[cx - r * 0.9, cy, cx + r * 0.9, cy]} stroke={ink} strokeWidth={sw * 0.9} />
+          <Circle x={cx} y={cy} radius={r} stroke={green} strokeWidth={sw} fill={FILL} />
+          <Line points={[cx, cy - r * 0.9, cx, cy + r * 0.9]} stroke={green} strokeWidth={sw * 0.9} />
+          <Line points={[cx - r * 0.9, cy, cx + r * 0.9, cy]} stroke={green} strokeWidth={sw * 0.9} />
         </>
       );
     case "spot":
       return (
         <>
-          <Circle x={cx} y={cy} radius={r} stroke={ink} strokeWidth={sw} fill={FILL} />
-          <Circle x={cx} y={cy} radius={r * 0.32} stroke={ink} strokeWidth={sw * 0.8} fill={FILL} />
-          <Line points={[cx, cy + r * 0.4, cx, cy + r * 0.95]} stroke={ink} strokeWidth={sw * 0.8} />
-          <Line points={[cx - r * 0.28, cy + r * 0.75, cx + r * 0.28, cy + r * 0.75]} stroke={ink} strokeWidth={sw * 0.75} />
+          <Circle x={cx} y={cy} radius={r} stroke={green} strokeWidth={sw} fill={FILL} />
+          <Circle x={cx} y={cy} radius={r * 0.32} stroke={green} strokeWidth={sw * 0.8} fill={FILL} />
+          <Line points={[cx, cy + r * 0.4, cx, cy + r * 0.95]} stroke={green} strokeWidth={sw * 0.8} />
+          <Line points={[cx - r * 0.28, cy + r * 0.75, cx + r * 0.28, cy + r * 0.75]} stroke={green} strokeWidth={sw * 0.75} />
         </>
       );
     case "aplica":
@@ -243,12 +248,12 @@ function renderGlyph(type: SymbolType, w: number, h: number, sw: number) {
     case "tablou_electric":
       return (
         <>
-          <Rect x={sw * 0.3} y={sw * 0.3} width={w - sw * 0.6} height={h - sw * 0.6} stroke={ink} strokeWidth={sw * 1.25} fill={FILL} />
-          <Rect x={sw * 1.1} y={sw * 1.1} width={w - sw * 2.2} height={h - sw * 2.2} stroke={ink} strokeWidth={sw * 0.7} />
-          <Line points={[sw * 1.5, h * 0.35, w - sw * 1.5, h * 0.35]} stroke={ink} strokeWidth={sw * 0.75} />
-          <Line points={[sw * 1.5, h * 0.48, w - sw * 1.5, h * 0.48]} stroke={ink} strokeWidth={sw * 0.75} />
-          <Line points={[sw * 1.5, h * 0.61, w - sw * 1.5, h * 0.61]} stroke={ink} strokeWidth={sw * 0.75} />
-          <Text x={0} y={h - font - sw} width={w} align="center" text="TE" fontSize={font} fontStyle="bold" fill={ink} fontFamily="Arial" />
+          <Rect x={sw * 0.3} y={sw * 0.3} width={w - sw * 0.6} height={h - sw * 0.6} stroke={panel} strokeWidth={sw * 1.25} fill={FILL} />
+          <Rect x={sw * 1.1} y={sw * 1.1} width={w - sw * 2.2} height={h - sw * 2.2} stroke={panel} strokeWidth={sw * 0.7} />
+          <Line points={[sw * 1.5, h * 0.35, w - sw * 1.5, h * 0.35]} stroke={panel} strokeWidth={sw * 0.75} />
+          <Line points={[sw * 1.5, h * 0.48, w - sw * 1.5, h * 0.48]} stroke={panel} strokeWidth={sw * 0.75} />
+          <Line points={[sw * 1.5, h * 0.61, w - sw * 1.5, h * 0.61]} stroke={panel} strokeWidth={sw * 0.75} />
+          <Text x={0} y={h - font - sw} width={w} align="center" text="TE" fontSize={font} fontStyle="bold" fill={panel} fontFamily="Arial" />
         </>
       );
     default:
@@ -261,11 +266,15 @@ function LedStrip({
   height,
   selected,
   onLengthChange,
+  onResizeStart,
+  onResizeEnd,
 }: {
   length: number;
   height: number;
   selected: boolean;
   onLengthChange?: (lengthPx: number, commit?: boolean) => void;
+  onResizeStart?: () => void;
+  onResizeEnd?: () => void;
 }) {
   const cy = height / 2;
   const half = length / 2;
@@ -275,29 +284,81 @@ function LedStrip({
     return -half + t * length;
   });
 
+  function makeHandlers(side: "left" | "right") {
+    const sign = side === "right" ? 1 : -1;
+    return {
+      onMouseDown: (event: { cancelBubble: boolean; evt: Event }) => {
+        event.cancelBubble = true;
+        event.evt.preventDefault();
+      },
+      onTouchStart: (event: { cancelBubble: boolean }) => {
+        event.cancelBubble = true;
+      },
+      onDragStart: (event: {
+        cancelBubble: boolean;
+        target: { getParent: () => { draggable: (value: boolean) => void } | null };
+      }) => {
+        event.cancelBubble = true;
+        onResizeStart?.();
+        event.target.getParent()?.draggable(false);
+      },
+      onDragMove: (event: {
+        cancelBubble: boolean;
+        target: { y: (value: number) => void; x: (value?: number) => number };
+      }) => {
+        event.cancelBubble = true;
+        const node = event.target;
+        node.y(cy);
+        const next = clampLedLengthPx(Math.abs(node.x()) * 2);
+        node.x(sign * (next / 2));
+        onLengthChange?.(next, false);
+      },
+      onDragEnd: (event: {
+        cancelBubble: boolean;
+        target: {
+          y: (value: number) => void;
+          x: (value?: number) => number;
+          getParent: () => { draggable: (value: boolean) => void } | null;
+        };
+      }) => {
+        event.cancelBubble = true;
+        const node = event.target;
+        node.y(cy);
+        const next = clampLedLengthPx(Math.abs(node.x()) * 2);
+        node.x(sign * (next / 2));
+        onLengthChange?.(next, true);
+        node.getParent()?.draggable(true);
+        onResizeEnd?.();
+      },
+    };
+  }
+
   return (
     <>
       {selected && (
         <Rect
-          x={-half - 3}
-          y={cy - 8}
-          width={length + 6}
-          height={16}
+          x={-half - 4}
+          y={cy - 10}
+          width={length + 8}
+          height={20}
           stroke="#38bdf8"
           strokeWidth={1}
           dash={[3, 2]}
+          listening={false}
         />
       )}
+      <Rect x={-half} y={cy - 8} width={length} height={16} fill="rgba(0,0,0,0.01)" />
       <Line
         points={[-half, cy, half, cy]}
         stroke={SYMBOL_COLORS.led}
-        strokeWidth={2}
+        strokeWidth={2.5}
         dash={[7, 5]}
         lineCap="round"
+        listening={false}
       />
-      {bulbs.map((bx) => (
+      {bulbs.map((bx, index) => (
         <Circle
-          key={`bulb-${bx}`}
+          key={`bulb-${index}`}
           x={bx}
           y={cy}
           radius={3.2}
@@ -307,63 +368,29 @@ function LedStrip({
           listening={false}
         />
       ))}
-      {selected && onLengthChange && (
+      {onLengthChange && (
         <>
           <Circle
             x={half}
             y={cy}
-            radius={5}
-            fill="#38bdf8"
+            radius={selected ? 7 : 4.5}
+            fill={selected ? "#38bdf8" : SYMBOL_COLORS.led}
             stroke="#fff"
             strokeWidth={1.5}
             draggable
-            onMouseDown={(event) => { event.cancelBubble = true; }}
-            onTouchStart={(event) => { event.cancelBubble = true; }}
-            onDragStart={(event) => { event.cancelBubble = true; }}
-            onDragMove={(event) => {
-              event.cancelBubble = true;
-              const node = event.target;
-              node.y(cy);
-              const next = clampLedLengthPx(Math.abs(node.x()) * 2);
-              node.x(next / 2);
-              onLengthChange(next, false);
-            }}
-            onDragEnd={(event) => {
-              event.cancelBubble = true;
-              const node = event.target;
-              node.y(cy);
-              const next = clampLedLengthPx(Math.abs(node.x()) * 2);
-              node.x(next / 2);
-              onLengthChange(next, true);
-            }}
+            hitStrokeWidth={18}
+            {...makeHandlers("right")}
           />
           <Circle
             x={-half}
             y={cy}
-            radius={5}
-            fill="#38bdf8"
+            radius={selected ? 7 : 4.5}
+            fill={selected ? "#38bdf8" : SYMBOL_COLORS.led}
             stroke="#fff"
             strokeWidth={1.5}
             draggable
-            onMouseDown={(event) => { event.cancelBubble = true; }}
-            onTouchStart={(event) => { event.cancelBubble = true; }}
-            onDragStart={(event) => { event.cancelBubble = true; }}
-            onDragMove={(event) => {
-              event.cancelBubble = true;
-              const node = event.target;
-              node.y(cy);
-              const next = clampLedLengthPx(Math.abs(node.x()) * 2);
-              node.x(-next / 2);
-              onLengthChange(next, false);
-            }}
-            onDragEnd={(event) => {
-              event.cancelBubble = true;
-              const node = event.target;
-              node.y(cy);
-              const next = clampLedLengthPx(Math.abs(node.x()) * 2);
-              node.x(-next / 2);
-              onLengthChange(next, true);
-            }}
+            hitStrokeWidth={18}
+            {...makeHandlers("left")}
           />
         </>
       )}
@@ -453,35 +480,35 @@ function SwitchModule({
   sw: number;
   variant: "normal" | "cs" | "cruce";
 }) {
-  const ink = SYMBOL_COLORS.default;
+  const color = SYMBOL_COLORS.switch;
   const hub = Math.max(0.7, r * 0.12);
   if (variant === "cs") {
     return (
       <>
-        <Circle x={cx} y={cy} radius={r} stroke={ink} strokeWidth={sw} fill={FILL} />
+        <Circle x={cx} y={cy} radius={r} stroke={color} strokeWidth={sw} fill={FILL} />
         <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-50} sw={sw} />
         <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={130} sw={sw} />
-        <Circle x={cx} y={cy} radius={hub} fill={ink} />
+        <Circle x={cx} y={cy} radius={hub} fill={color} />
       </>
     );
   }
   if (variant === "cruce") {
     return (
       <>
-        <Circle x={cx} y={cy} radius={r} stroke={ink} strokeWidth={sw} fill={FILL} />
+        <Circle x={cx} y={cy} radius={r} stroke={color} strokeWidth={sw} fill={FILL} />
         <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-45} sw={sw} />
         <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={45} sw={sw} />
         <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={135} sw={sw} />
         <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-135} sw={sw} />
-        <Circle x={cx} y={cy} radius={hub} fill={ink} />
+        <Circle x={cx} y={cy} radius={hub} fill={color} />
       </>
     );
   }
   return (
     <>
-      <Circle x={cx} y={cy} radius={r} stroke={ink} strokeWidth={sw} fill={FILL} />
+      <Circle x={cx} y={cy} radius={r} stroke={color} strokeWidth={sw} fill={FILL} />
       <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-55} sw={sw} />
-      <Circle x={cx} y={cy} radius={hub} fill={ink} />
+      <Circle x={cx} y={cy} radius={hub} fill={color} />
     </>
   );
 }
@@ -502,5 +529,5 @@ function SwitchLever({
   const rad = (angleDeg * Math.PI) / 180;
   const x2 = cx + Math.cos(rad) * length;
   const y2 = cy + Math.sin(rad) * length;
-  return <Line points={[cx, cy, x2, y2]} stroke={SYMBOL_COLORS.default} strokeWidth={sw} lineCap="round" />;
+  return <Line points={[cx, cy, x2, y2]} stroke={SYMBOL_COLORS.switch} strokeWidth={sw} lineCap="round" />;
 }

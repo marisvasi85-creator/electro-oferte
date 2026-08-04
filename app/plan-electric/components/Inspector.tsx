@@ -121,8 +121,8 @@ export function Inspector({ symbol, settings, onChange, onDelete, onDuplicate }:
       )}
       {symbol.symbolType === "led" && (
         <p className="pe-muted pe-cable-hint">
-          Selectează banda și trage mânerele albastre de la capete ca să o lungești.
-        </p>
+        Selectează banda LED și trage capetele (cercurile) ca să o alungești sau scurtezi.
+      </p>
       )}
       <div className="pe-inspector-actions">
         <button type="button" onClick={onDuplicate}>Duplică</button>
