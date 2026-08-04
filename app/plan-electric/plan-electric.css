@@ -219,7 +219,8 @@
 
 .pe-canvas-wrap { position: relative; min-width: 0; background: #0a0e14; }
 .pe-canvas-shell { width: 100%; height: calc(100vh - 58px); overflow: hidden; }
-.pe-canvas-shell.panning { cursor: grab; }
+.pe-canvas-shell.panning, .pe-canvas-shell.pan-mode { cursor: grab; }
+.pe-canvas-shell.panning:active, .pe-canvas-shell.pan-mode:active { cursor: grabbing; }
 .pe-legend {
   position: absolute;
   right: 16px;

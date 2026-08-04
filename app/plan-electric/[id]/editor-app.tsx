@@ -40,6 +40,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
   const [page, setPage] = useState<PlanPage | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [panMode, setPanMode] = useState(false);
   const [showCableGuides, setShowCableGuides] = useState(true);
   const [calibrating, setCalibrating] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<{ x: number; y: number }[]>([]);
@@ -91,6 +92,14 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
       if (event.key === "Escape" && calibrating) {
         setCalibrating(false);
         setCalibrationPoints([]);
+      }
+      if (event.key.toLowerCase() === "h" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const target = event.target as HTMLElement | null;
+        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+          return;
+        }
+        event.preventDefault();
+        setPanMode((value) => !value);
       }
       if (event.key === "Delete" || event.key === "Backspace") {
         if (selectedId && !calibrating) {
@@ -297,6 +306,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
       <PlanToolbar
         title={project.name}
         snapEnabled={snapEnabled}
+        panMode={panMode}
         canUndo={history.canUndo}
         canRedo={history.canRedo}
         busy={busy}
@@ -312,12 +322,14 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
         onFit={fitToScreen}
         onResetZoom={() => { zoom.zoomTo(0.35); pan.setPosition({ x: 40, y: 40 }); }}
         onToggleSnap={() => setSnapEnabled((value) => !value)}
+        onTogglePanMode={() => setPanMode((value) => !value)}
         onToggleCableGuides={() => setShowCableGuides((value) => !value)}
         showCableGuides={showCableGuides}
         onCalibrate={() => {
           setCalibrating(true);
           setCalibrationPoints([]);
           setSelectedId(null);
+          setPanMode(false);
         }}
         calibrating={calibrating}
         onSave={() => void handleSave()}
@@ -354,6 +366,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
             symbols={history.present}
             selectedId={selectedId}
             spacePressed={pan.spacePressed}
+            panMode={panMode}
             snapEnabled={snapEnabled}
             calibrating={calibrating}
             calibrationPoints={calibrationPoints}
@@ -365,7 +378,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
             onMove={(id, x, y) => {
               history.set((symbols) => symbols.map((symbol) => (symbol.id === id ? { ...symbol, x, y } : symbol)));
             }}
-            onStagePan={(x, y) => pan.setPosition({ x, y })}
+            onPanBy={(dx, dy) => pan.panBy(dx, dy)}
             onZoomAt={(factor, pointer) => {
               const oldScale = zoom.scale;
               const next = Math.min(4, Math.max(0.1, oldScale * factor));

@@ -5,6 +5,7 @@ type ToolbarProps = {
   snapEnabled: boolean;
   showCableGuides: boolean;
   calibrating: boolean;
+  panMode: boolean;
   canUndo: boolean;
   canRedo: boolean;
   busy?: string;
@@ -19,6 +20,7 @@ type ToolbarProps = {
   onResetZoom: () => void;
   onToggleSnap: () => void;
   onToggleCableGuides: () => void;
+  onTogglePanMode: () => void;
   onCalibrate: () => void;
   onSave: () => void;
   onExport: (format: "pdf-a4" | "pdf-a3" | "png" | "jpeg") => void;
@@ -29,6 +31,7 @@ export function PlanToolbar({
   snapEnabled,
   showCableGuides,
   calibrating,
+  panMode,
   canUndo,
   canRedo,
   busy,
@@ -43,6 +46,7 @@ export function PlanToolbar({
   onResetZoom,
   onToggleSnap,
   onToggleCableGuides,
+  onTogglePanMode,
   onCalibrate,
   onSave,
   onExport,
@@ -59,6 +63,9 @@ export function PlanToolbar({
         <button type="button" onClick={onImport}>Import</button>
         <button type="button" onClick={onUndo} disabled={!canUndo}>Undo</button>
         <button type="button" onClick={onRedo} disabled={!canRedo}>Redo</button>
+        <button type="button" className={panMode ? "active" : ""} onClick={onTogglePanMode} title="Mută planul (fără zoom)">
+          Mână
+        </button>
         <button type="button" onClick={onZoomOut}>Zoom −</button>
         <button type="button" onClick={onZoomIn}>Zoom +</button>
         <button type="button" onClick={onFit}>Fit</button>
