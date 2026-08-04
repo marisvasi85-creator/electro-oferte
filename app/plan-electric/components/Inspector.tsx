@@ -1,29 +1,40 @@
 "use client";
 
 import type { SymbolInstance } from "../../../lib/plan-electric/types";
+import {
+  defaultMountingHeightM,
+  resolveMountingHeightM,
+} from "../../../lib/plan-electric/cable";
+import type { CableSettings } from "../../../lib/plan-electric/types";
 import { getSymbolDefinition } from "../../../lib/plan-electric/symbols";
 
 type InspectorProps = {
   symbol: SymbolInstance | null;
+  settings: CableSettings;
   onChange: (patch: Partial<SymbolInstance>) => void;
   onDelete: () => void;
   onDuplicate: () => void;
 };
 
-export function Inspector({ symbol, onChange, onDelete, onDuplicate }: InspectorProps) {
+export function Inspector({ symbol, settings, onChange, onDelete, onDuplicate }: InspectorProps) {
   if (!symbol) {
     return (
-      <aside className="pe-inspector">
-        <div className="pe-panel-title"><span>Inspector</span></div>
-        <p className="pe-muted">Selectează un simbol pe plan pentru a-i edita proprietățile.</p>
-      </aside>
+      <section className="pe-symbol-inspector">
+        <div className="pe-panel-title">
+          <span>Proprietăți</span>
+          <small>Selectează un simbol pe plan</small>
+        </div>
+        <p className="pe-muted">Click pe un simbol pentru denumire, observații, rotație și înălțime montaj.</p>
+      </section>
     );
   }
 
   const def = getSymbolDefinition(symbol.symbolType);
+  const height = resolveMountingHeightM(symbol, settings);
+  const hasOverride = typeof symbol.metadata?.mountingHeightM === "number";
 
   return (
-    <aside className="pe-inspector">
+    <section className="pe-symbol-inspector">
       <div className="pe-panel-title">
         <span>Proprietăți</span>
         <small>{def.label}</small>
@@ -37,6 +48,38 @@ export function Inspector({ symbol, onChange, onDelete, onDuplicate }: Inspector
         <textarea value={symbol.notes} rows={3} onChange={(event) => onChange({ notes: event.target.value })} />
       </label>
       <label>
+        Înălțime montaj (m)
+        <input
+          type="number"
+          min={0}
+          max={5}
+          step={0.05}
+          value={height}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            onChange({
+              metadata: {
+                ...symbol.metadata,
+                mountingHeightM: Number.isFinite(value) ? value : defaultMountingHeightM(symbol.symbolType, settings),
+              },
+            });
+          }}
+        />
+      </label>
+      {hasOverride && (
+        <button
+          type="button"
+          className="pe-cable-calibrate-btn"
+          onClick={() => {
+            const next = { ...symbol.metadata };
+            delete next.mountingHeightM;
+            onChange({ metadata: next });
+          }}
+        >
+          Resetează la default categorie
+        </button>
+      )}
+      <label>
         Rotație (°)
         <input
           type="number"
@@ -45,7 +88,7 @@ export function Inspector({ symbol, onChange, onDelete, onDuplicate }: Inspector
         />
       </label>
       <label>
-        Scară
+        Scară simbol
         <input
           type="number"
           min={0.4}
@@ -59,6 +102,6 @@ export function Inspector({ symbol, onChange, onDelete, onDuplicate }: Inspector
         <button type="button" onClick={onDuplicate}>Duplică</button>
         <button type="button" className="danger" onClick={onDelete}>Șterge</button>
       </div>
-    </aside>
+    </section>
   );
 }

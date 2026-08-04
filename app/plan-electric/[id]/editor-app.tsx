@@ -8,17 +8,24 @@ import type { User } from "@supabase/supabase-js";
 import { PlanToolbar } from "../components/Toolbar";
 import { SidebarSymbols } from "../components/SidebarSymbols";
 import { Inspector } from "../components/Inspector";
+import { CablePanel } from "../components/CablePanel";
 import { Legend } from "../components/Legend";
 import { buildEdgeGuides, useHistory, usePan, useZoom } from "../hooks/editor-hooks";
 import {
   getPlanProjectBundle,
   savePlanSymbols,
   updatePlanPageBackground,
+  updatePlanPageSettings,
   uploadPlanBackground,
 } from "../../../lib/plan-electric/data";
 import { importPlanFile } from "../../../lib/plan-electric/import-plan";
 import { exportPlanImage, exportPlanPdf } from "../../../lib/plan-electric/export";
-import type { PlanPage, PlanProject, SymbolInstance, SymbolType } from "../../../lib/plan-electric/types";
+import {
+  estimateCable,
+  mergeCableSettings,
+  metersPerPixelFromCalibration,
+} from "../../../lib/plan-electric/cable";
+import type { CableSettings, PlanPage, PlanProject, SymbolInstance, SymbolType } from "../../../lib/plan-electric/types";
 import { getSymbolDefinition } from "../../../lib/plan-electric/symbols";
 import { supabase } from "../../../lib/supabase";
 
@@ -33,6 +40,10 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
   const [page, setPage] = useState<PlanPage | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [panMode, setPanMode] = useState(false);
+  const [showCableGuides, setShowCableGuides] = useState(true);
+  const [calibrating, setCalibrating] = useState(false);
+  const [calibrationPoints, setCalibrationPoints] = useState<{ x: number; y: number }[]>([]);
   const [busy, setBusy] = useState("Se încarcă proiectul…");
   const [guides, setGuides] = useState<{ vertical: number[]; horizontal: number[] }>({ vertical: [], horizontal: [] });
   const [stageSize, setStageSize] = useState({ width: 900, height: 700 });
@@ -42,6 +53,9 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
   const stageRef = useRef<Konva.Stage | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
+  const settingsSaveTimer = useRef<number | null>(null);
+
+  const settings = page?.settings ?? mergeCableSettings();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
@@ -75,8 +89,20 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
         if (event.shiftKey) history.redo();
         else history.undo();
       }
+      if (event.key === "Escape" && calibrating) {
+        setCalibrating(false);
+        setCalibrationPoints([]);
+      }
+      if (event.key.toLowerCase() === "h" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const target = event.target as HTMLElement | null;
+        if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+          return;
+        }
+        event.preventDefault();
+        setPanMode((value) => !value);
+      }
       if (event.key === "Delete" || event.key === "Backspace") {
-        if (selectedId) {
+        if (selectedId && !calibrating) {
           history.set((symbols) => symbols.filter((symbol) => symbol.id !== selectedId));
           setSelectedId(null);
         }
@@ -91,7 +117,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [history, pan, selectedId]);
+  }, [calibrating, history, pan, selectedId]);
 
   useEffect(() => {
     const node = shellRef.current;
@@ -124,6 +150,35 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
     [history.present, selectedId],
   );
 
+  const cableEstimate = useMemo(
+    () => estimateCable(history.present, settings),
+    [history.present, settings],
+  );
+
+  const calibrationPixels = useMemo(() => {
+    if (calibrationPoints.length < 2) return null;
+    const [a, b] = calibrationPoints;
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  }, [calibrationPoints]);
+
+  const persistSettings = useCallback((pageId: string, nextSettings: CableSettings) => {
+    if (settingsSaveTimer.current) window.clearTimeout(settingsSaveTimer.current);
+    settingsSaveTimer.current = window.setTimeout(() => {
+      void updatePlanPageSettings(pageId, nextSettings).catch(() => {
+        // Local fallback already handled inside updatePlanPageSettings.
+      });
+    }, 400);
+  }, []);
+
+  const patchSettings = useCallback((patch: Partial<CableSettings>) => {
+    setPage((current) => {
+      if (!current) return current;
+      const nextSettings = mergeCableSettings({ ...current.settings, ...patch });
+      persistSettings(current.id, nextSettings);
+      return { ...current, settings: nextSettings };
+    });
+  }, [persistSettings]);
+
   const fitToScreen = useCallback(() => {
     if (!page) return;
     const next = Math.min(
@@ -138,7 +193,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
   }, [page, pan, stageSize.height, stageSize.width, zoom]);
 
   const placeSymbol = useCallback((type: SymbolType, x?: number, y?: number) => {
-    if (!page) return;
+    if (!page || calibrating) return;
     const def = getSymbolDefinition(type);
     const instance: SymbolInstance = {
       id: crypto.randomUUID(),
@@ -154,7 +209,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
     };
     history.set((symbols) => [...symbols, instance]);
     setSelectedId(instance.id);
-  }, [history, page]);
+  }, [calibrating, history, page]);
 
   async function handleImport(file: File) {
     if (!user || !project || !page) return;
@@ -168,7 +223,11 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
         width: imported.width,
         height: imported.height,
       });
-      setPage({ ...updated, backgroundUrl: uploaded.url || updated.backgroundUrl });
+      setPage({
+        ...updated,
+        backgroundUrl: uploaded.url || updated.backgroundUrl,
+        settings: page.settings,
+      });
       setBusy("Plan importat.");
       window.setTimeout(() => setBusy(""), 1200);
     } catch (error) {
@@ -181,6 +240,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
     setBusy("Se salvează…");
     try {
       await savePlanSymbols(page.id, history.present);
+      await updatePlanPageSettings(page.id, page.settings);
       setBusy("Salvat.");
       window.setTimeout(() => setBusy(""), 1200);
     } catch (error) {
@@ -212,6 +272,24 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
     }
   }
 
+  function applyCalibration(realDistanceM: number) {
+    if (!calibrationPixels || calibrationPixels <= 0 || !(realDistanceM > 0)) {
+      setBusy("Calibrare invalidă — setează distanța reală.");
+      return;
+    }
+    const metersPerPixel = metersPerPixelFromCalibration(calibrationPixels, realDistanceM);
+    if (!metersPerPixel) return;
+    patchSettings({
+      metersPerPixel,
+      calibrationPixelDistance: calibrationPixels,
+      calibrationRealDistanceM: realDistanceM,
+    });
+    setCalibrating(false);
+    setCalibrationPoints([]);
+    setBusy("Scară calibrată.");
+    window.setTimeout(() => setBusy(""), 1200);
+  }
+
   if (!project || !page) {
     return (
       <main className="pe-app">
@@ -228,9 +306,13 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
       <PlanToolbar
         title={project.name}
         snapEnabled={snapEnabled}
+        panMode={panMode}
         canUndo={history.canUndo}
         canRedo={history.canRedo}
         busy={busy}
+        cableTotalLabel={cableEstimate.calibrated && !cableEstimate.missingPanel
+          ? `${cableEstimate.withReserveM.toFixed(1)} m cablu`
+          : undefined}
         onBack={() => { window.location.href = "/plan-electric"; }}
         onImport={() => importInput.current?.click()}
         onUndo={history.undo}
@@ -240,6 +322,16 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
         onFit={fitToScreen}
         onResetZoom={() => { zoom.zoomTo(0.35); pan.setPosition({ x: 40, y: 40 }); }}
         onToggleSnap={() => setSnapEnabled((value) => !value)}
+        onTogglePanMode={() => setPanMode((value) => !value)}
+        onToggleCableGuides={() => setShowCableGuides((value) => !value)}
+        showCableGuides={showCableGuides}
+        onCalibrate={() => {
+          setCalibrating(true);
+          setCalibrationPoints([]);
+          setSelectedId(null);
+          setPanMode(false);
+        }}
+        calibrating={calibrating}
         onSave={() => void handleSave()}
         onExport={(format) => void handleExport(format)}
       />
@@ -274,14 +366,19 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
             symbols={history.present}
             selectedId={selectedId}
             spacePressed={pan.spacePressed}
+            panMode={panMode}
             snapEnabled={snapEnabled}
+            calibrating={calibrating}
+            calibrationPoints={calibrationPoints}
+            cableRuns={cableEstimate.runs}
+            showCableGuides={showCableGuides && cableEstimate.calibrated && !cableEstimate.missingPanel}
             guides={guides}
             stageRef={stageRef}
             onSelect={setSelectedId}
             onMove={(id, x, y) => {
               history.set((symbols) => symbols.map((symbol) => (symbol.id === id ? { ...symbol, x, y } : symbol)));
             }}
-            onStagePan={(x, y) => pan.setPosition({ x, y })}
+            onPanBy={(dx, dy) => pan.panBy(dx, dy)}
             onZoomAt={(factor, pointer) => {
               const oldScale = zoom.scale;
               const next = Math.min(4, Math.max(0.1, oldScale * factor));
@@ -296,32 +393,65 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
               });
             }}
             onDropSymbol={(type, x, y) => placeSymbol(type, x, y)}
+            onCalibrationClick={(x, y) => {
+              setCalibrationPoints((points) => {
+                if (points.length >= 2) return [{ x, y }];
+                return [...points, { x, y }];
+              });
+            }}
           />
           <Legend symbols={history.present} />
         </div>
-        <Inspector
-          symbol={selected}
-          onChange={(patch) => {
-            if (!selectedId) return;
-            history.set((symbols) => symbols.map((symbol) => (symbol.id === selectedId ? { ...symbol, ...patch } : symbol)));
-          }}
-          onDelete={() => {
-            if (!selectedId) return;
-            history.set((symbols) => symbols.filter((symbol) => symbol.id !== selectedId));
-            setSelectedId(null);
-          }}
-          onDuplicate={() => {
-            if (!selected) return;
-            const clone: SymbolInstance = {
-              ...selected,
-              id: crypto.randomUUID(),
-              x: selected.x + 24,
-              y: selected.y + 24,
-            };
-            history.set((symbols) => [...symbols, clone]);
-            setSelectedId(clone.id);
-          }}
-        />
+        <aside className="pe-inspector">
+          <CablePanel
+            settings={settings}
+            estimate={cableEstimate}
+            calibrating={calibrating}
+            calibrationPixels={calibrationPixels}
+            onChangeSettings={patchSettings}
+            onStartCalibration={() => {
+              setCalibrating(true);
+              setCalibrationPoints([]);
+              setSelectedId(null);
+            }}
+            onCancelCalibration={() => {
+              setCalibrating(false);
+              setCalibrationPoints([]);
+            }}
+            onApplyCalibration={applyCalibration}
+          />
+          <Inspector
+            symbol={selected}
+            settings={settings}
+            onChange={(patch) => {
+              if (!selectedId) return;
+              history.set((symbols) => symbols.map((symbol) => {
+                if (symbol.id !== selectedId) return symbol;
+                if (patch.metadata) {
+                  return { ...symbol, ...patch, metadata: patch.metadata };
+                }
+                return { ...symbol, ...patch };
+              }));
+            }}
+            onDelete={() => {
+              if (!selectedId) return;
+              history.set((symbols) => symbols.filter((symbol) => symbol.id !== selectedId));
+              setSelectedId(null);
+            }}
+            onDuplicate={() => {
+              if (!selected) return;
+              const clone: SymbolInstance = {
+                ...selected,
+                id: crypto.randomUUID(),
+                x: selected.x + 24,
+                y: selected.y + 24,
+                metadata: { ...selected.metadata },
+              };
+              history.set((symbols) => [...symbols, clone]);
+              setSelectedId(clone.id);
+            }}
+          />
+        </aside>
       </div>
     </main>
   );

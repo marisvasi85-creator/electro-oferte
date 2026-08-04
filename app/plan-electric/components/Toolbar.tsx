@@ -3,9 +3,13 @@
 type ToolbarProps = {
   title: string;
   snapEnabled: boolean;
+  showCableGuides: boolean;
+  calibrating: boolean;
+  panMode: boolean;
   canUndo: boolean;
   canRedo: boolean;
   busy?: string;
+  cableTotalLabel?: string;
   onBack: () => void;
   onImport: () => void;
   onUndo: () => void;
@@ -15,6 +19,9 @@ type ToolbarProps = {
   onFit: () => void;
   onResetZoom: () => void;
   onToggleSnap: () => void;
+  onToggleCableGuides: () => void;
+  onTogglePanMode: () => void;
+  onCalibrate: () => void;
   onSave: () => void;
   onExport: (format: "pdf-a4" | "pdf-a3" | "png" | "jpeg") => void;
 };
@@ -22,9 +29,13 @@ type ToolbarProps = {
 export function PlanToolbar({
   title,
   snapEnabled,
+  showCableGuides,
+  calibrating,
+  panMode,
   canUndo,
   canRedo,
   busy,
+  cableTotalLabel,
   onBack,
   onImport,
   onUndo,
@@ -34,6 +45,9 @@ export function PlanToolbar({
   onFit,
   onResetZoom,
   onToggleSnap,
+  onToggleCableGuides,
+  onTogglePanMode,
+  onCalibrate,
   onSave,
   onExport,
 }: ToolbarProps) {
@@ -42,18 +56,28 @@ export function PlanToolbar({
       <div className="pe-toolbar-left">
         <button type="button" onClick={onBack}>← Proiecte</button>
         <strong>{title}</strong>
+        {cableTotalLabel && <span className="pe-cable-badge">{cableTotalLabel}</span>}
         {busy && <span className="pe-busy">{busy}</span>}
       </div>
       <div className="pe-toolbar-actions">
         <button type="button" onClick={onImport}>Import</button>
         <button type="button" onClick={onUndo} disabled={!canUndo}>Undo</button>
         <button type="button" onClick={onRedo} disabled={!canRedo}>Redo</button>
+        <button type="button" className={panMode ? "active" : ""} onClick={onTogglePanMode} title="Mută planul (fără zoom)">
+          Mână
+        </button>
         <button type="button" onClick={onZoomOut}>Zoom −</button>
         <button type="button" onClick={onZoomIn}>Zoom +</button>
         <button type="button" onClick={onFit}>Fit</button>
         <button type="button" onClick={onResetZoom}>Reset zoom</button>
         <button type="button" className={snapEnabled ? "active" : ""} onClick={onToggleSnap}>
           Snap {snapEnabled ? "ON" : "OFF"}
+        </button>
+        <button type="button" className={calibrating ? "active" : ""} onClick={onCalibrate}>
+          Calibrare
+        </button>
+        <button type="button" className={showCableGuides ? "active" : ""} onClick={onToggleCableGuides}>
+          Trasee
         </button>
         <button type="button" onClick={onSave}>Salvează</button>
         <div className="pe-export-group">
