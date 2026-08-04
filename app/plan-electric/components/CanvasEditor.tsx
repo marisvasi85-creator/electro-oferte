@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Stage, Layer, Image as KonvaImage, Rect } from "react-konva";
+import { Stage, Layer, Image as KonvaImage, Rect, Line, Circle } from "react-konva";
 import type Konva from "konva";
-import type { SymbolInstance, SymbolType } from "../../../lib/plan-electric/types";
+import type { CableRun, SymbolInstance, SymbolType } from "../../../lib/plan-electric/types";
 import { SymbolShape } from "./SymbolShape";
 import { snapPoint } from "../hooks/editor-hooks";
 
@@ -19,12 +19,17 @@ type CanvasEditorProps = {
   selectedId: string | null;
   spacePressed: boolean;
   snapEnabled: boolean;
+  calibrating: boolean;
+  calibrationPoints: { x: number; y: number }[];
+  cableRuns: CableRun[];
+  showCableGuides: boolean;
   guides: { vertical: number[]; horizontal: number[] };
   onSelect: (id: string | null) => void;
   onMove: (id: string, x: number, y: number) => void;
   onStagePan: (x: number, y: number) => void;
   onZoomAt: (factor: number, pointer: { x: number; y: number }) => void;
   onDropSymbol: (type: SymbolType, x: number, y: number) => void;
+  onCalibrationClick: (x: number, y: number) => void;
   stageRef: React.MutableRefObject<Konva.Stage | null>;
 };
 
@@ -40,22 +45,29 @@ export function CanvasEditor({
   selectedId,
   spacePressed,
   snapEnabled,
+  calibrating,
+  calibrationPoints,
+  cableRuns,
+  showCableGuides,
   guides,
   onSelect,
   onMove,
   onStagePan,
   onZoomAt,
   onDropSymbol,
+  onCalibrationClick,
   stageRef,
 }: CanvasEditorProps) {
   const background = useHtmlImage(backgroundUrl);
+  const symbolById = new Map(symbols.map((symbol) => [symbol.id, symbol]));
 
   return (
     <div
-      className={`pe-canvas-shell ${spacePressed ? "panning" : ""}`}
+      className={`pe-canvas-shell ${spacePressed ? "panning" : ""} ${calibrating ? "calibrating" : ""}`}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
+        if (calibrating) return;
         const type = event.dataTransfer.getData("application/plan-symbol") as SymbolType;
         if (!type || !stageRef.current) return;
         const stage = stageRef.current;
@@ -78,12 +90,22 @@ export function CanvasEditor({
         scaleY={scale}
         x={position.x}
         y={position.y}
-        draggable={spacePressed}
+        draggable={spacePressed && !calibrating}
         onDragEnd={(event) => {
-          if (!spacePressed) return;
+          if (!spacePressed || calibrating) return;
           onStagePan(event.target.x(), event.target.y());
         }}
         onMouseDown={(event) => {
+          if (calibrating) {
+            const stage = event.target.getStage();
+            if (!stage) return;
+            const pointer = stage.getPointerPosition();
+            if (!pointer) return;
+            const x = (pointer.x - position.x) / scale;
+            const y = (pointer.y - position.y) / scale;
+            onCalibrationClick(x, y);
+            return;
+          }
           if (event.target === event.target.getStage()) onSelect(null);
         }}
         onWheel={(event) => {
@@ -101,6 +123,22 @@ export function CanvasEditor({
           {background && (
             <KonvaImage image={background} x={0} y={0} width={width} height={height} listening={false} />
           )}
+          {showCableGuides && cableRuns.map((run) => {
+            const panel = symbolById.get(run.panelId);
+            const device = symbolById.get(run.deviceId);
+            if (!panel || !device) return null;
+            return (
+              <Line
+                key={`cable-${run.deviceId}`}
+                points={[panel.x, panel.y, device.x, panel.y, device.x, device.y]}
+                stroke="#0284c7"
+                strokeWidth={1.5}
+                dash={[8, 6]}
+                opacity={0.55}
+                listening={false}
+              />
+            );
+          })}
           {symbols.map((symbol) => (
             <SymbolShape
               key={symbol.id}
@@ -110,7 +148,7 @@ export function CanvasEditor({
               rotation={symbol.rotation}
               scale={symbol.scale}
               selected={symbol.id === selectedId}
-              draggable={!spacePressed}
+              draggable={!spacePressed && !calibrating}
               onClick={() => onSelect(symbol.id)}
               onDragEnd={(x, y) => {
                 const snapped = snapPoint(x, y, guides, snapEnabled);
@@ -118,6 +156,32 @@ export function CanvasEditor({
               }}
             />
           ))}
+          {calibrationPoints.map((point, index) => (
+            <Circle
+              key={`cal-${index}`}
+              x={point.x}
+              y={point.y}
+              radius={6}
+              fill="#f59e0b"
+              stroke="#fff"
+              strokeWidth={2}
+              listening={false}
+            />
+          ))}
+          {calibrationPoints.length === 2 && (
+            <Line
+              points={[
+                calibrationPoints[0].x,
+                calibrationPoints[0].y,
+                calibrationPoints[1].x,
+                calibrationPoints[1].y,
+              ]}
+              stroke="#f59e0b"
+              strokeWidth={2}
+              dash={[6, 4]}
+              listening={false}
+            />
+          )}
         </Layer>
       </Stage>
     </div>

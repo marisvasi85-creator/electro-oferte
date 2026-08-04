@@ -1,5 +1,6 @@
 import { supabase } from "../supabase";
-import type { PlanPage, PlanProject, SymbolInstance, SymbolType } from "./types";
+import { mergeCableSettings } from "./cable";
+import type { CableSettings, PlanPage, PlanProject, SymbolInstance, SymbolType } from "./types";
 
 function mapProject(row: Record<string, unknown>): PlanProject {
   return {
@@ -28,6 +29,7 @@ function mapPage(row: Record<string, unknown>): PlanPage {
     width: Number(row.width ?? 2480),
     height: Number(row.height ?? 3508),
     sortOrder: Number(row.sort_order ?? 0),
+    settings: mergeCableSettings((row.settings as Partial<CableSettings> | null) ?? null),
   };
 }
 
@@ -152,6 +154,25 @@ export async function updatePlanPageBackground(input: {
   return mapPage(result.data);
 }
 
+export async function updatePlanPageSettings(pageId: string, settings: CableSettings) {
+  const result = await supabase.from("plan_pages").update({
+    settings,
+    updated_at: new Date().toISOString(),
+  }).eq("id", pageId).select("*").single();
+  if (result.error) {
+    if (
+      result.error.message.includes("plan_pages")
+      || result.error.message.includes("settings")
+      || result.error.code === "42P01"
+      || result.error.code === "PGRST204"
+    ) {
+      return updateLocalPageSettings(pageId, settings);
+    }
+    throw new Error(result.error.message);
+  }
+  return mapPage(result.data);
+}
+
 export async function uploadPlanBackground(userId: string, projectId: string, file: Blob, fileName: string) {
   const extension = fileName.split(".").pop()?.toLowerCase() || "png";
   const path = `${userId}/${projectId}/plan-${Date.now()}.${extension}`;
@@ -262,6 +283,7 @@ function createLocalProject(input: {
     width: 2480,
     height: 3508,
     sortOrder: 0,
+    settings: mergeCableSettings(),
   };
   const store = readStore();
   store.projects.unshift(project);
@@ -274,7 +296,9 @@ function readLocalBundle(projectId: string) {
   const store = readStore();
   const project = store.projects.find((entry) => entry.id === projectId);
   if (!project) throw new Error("Proiectul nu a fost găsit.");
-  const pages = store.pages.filter((page) => page.projectId === projectId);
+  const pages = store.pages
+    .filter((page) => page.projectId === projectId)
+    .map((page) => ({ ...page, settings: mergeCableSettings(page.settings) }));
   const pageId = pages[0]?.id;
   const symbols = pageId ? store.symbols.filter((symbol) => symbol.pageId === pageId) : [];
   return { project, pages, symbols };
@@ -295,6 +319,15 @@ function updateLocalPageBackground(input: {
     : input.backgroundPath;
   page.width = input.width;
   page.height = input.height;
+  writeStore(store);
+  return page;
+}
+
+function updateLocalPageSettings(pageId: string, settings: CableSettings) {
+  const store = readStore();
+  const page = store.pages.find((entry) => entry.id === pageId);
+  if (!page) throw new Error("Pagina nu a fost găsită.");
+  page.settings = mergeCableSettings(settings);
   writeStore(store);
   return page;
 }
