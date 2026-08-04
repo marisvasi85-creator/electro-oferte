@@ -1,10 +1,11 @@
 "use client";
 
-import { Group, Circle, Line, Rect, Text, Arc } from "react-konva";
+import { Group, Circle, Line, Rect, Text, Arc, RegularPolygon } from "react-konva";
 import type { SymbolType } from "../../../lib/plan-electric/types";
 import { getSymbolDefinition } from "../../../lib/plan-electric/symbols";
 
-const STROKE = "#111827";
+/** Black-on-white CAD look, similar to Romanian AutoCAD electrical plans. */
+const STROKE = "#0f172a";
 const FILL = "#ffffff";
 
 type SymbolShapeProps = {
@@ -17,7 +18,6 @@ type SymbolShapeProps = {
   draggable?: boolean;
   onClick?: () => void;
   onDragEnd?: (x: number, y: number) => void;
-  onTransformEnd?: (rotation: number, scale: number) => void;
 };
 
 export function SymbolShape({
@@ -34,6 +34,7 @@ export function SymbolShape({
   const def = getSymbolDefinition(type);
   const w = def.width;
   const h = def.height;
+  const sw = Math.max(1, Math.min(w, h) * 0.1);
 
   return (
     <Group
@@ -50,144 +51,255 @@ export function SymbolShape({
       offsetY={h / 2}
     >
       {selected && (
-        <Rect x={-3} y={-3} width={w + 6} height={h + 6} stroke="#38bdf8" strokeWidth={1.5} dash={[4, 3]} />
+        <Rect
+          x={-2}
+          y={-2}
+          width={w + 4}
+          height={h + 4}
+          stroke="#38bdf8"
+          strokeWidth={1}
+          dash={[3, 2]}
+        />
       )}
-      {renderGlyph(type, w, h)}
+      {renderGlyph(type, w, h, sw)}
     </Group>
   );
 }
 
-function renderGlyph(type: SymbolType, w: number, h: number) {
+/**
+ * Glyphs sized relative to symbol width/height so library sizes stay compact
+ * on architectural plans (Romanian SR EN 60617 practice).
+ */
+function renderGlyph(type: SymbolType, w: number, h: number, sw: number) {
+  const cx = w / 2;
+  const cy = h / 2;
+  const r = Math.min(w, h) / 2 - sw * 0.4;
+  const font = Math.max(4, Math.min(w, h) * 0.32);
+
   switch (type) {
     case "priza_simpla":
-      return (
-        <>
-          <Circle x={w / 2} y={h / 2} radius={10} stroke={STROKE} strokeWidth={1.8} fill={FILL} />
-          <Circle x={w / 2 - 3.5} y={h / 2} radius={1.4} fill={STROKE} />
-          <Circle x={w / 2 + 3.5} y={h / 2} radius={1.4} fill={STROKE} />
-        </>
-      );
+      return <Socket2PT cx={cx} cy={cy} r={r} sw={sw} />;
     case "priza_dubla":
       return (
         <>
-          <Circle x={w / 2 - 7} y={h / 2} radius={8} stroke={STROKE} strokeWidth={1.6} fill={FILL} />
-          <Circle x={w / 2 + 7} y={h / 2} radius={8} stroke={STROKE} strokeWidth={1.6} fill={FILL} />
-          <Circle x={w / 2 - 7} y={h / 2} radius={5} stroke={STROKE} strokeWidth={1.2} />
-          <Circle x={w / 2 + 7} y={h / 2} radius={5} stroke={STROKE} strokeWidth={1.2} />
+          <Socket2PT cx={w * 0.28} cy={cy} r={r * 0.85} sw={sw} />
+          <Socket2PT cx={w * 0.72} cy={cy} r={r * 0.85} sw={sw} />
         </>
       );
     case "priza_ip54":
       return (
         <>
-          <Rect x={2} y={2} width={w - 4} height={h - 4} stroke={STROKE} strokeWidth={1.8} fill={FILL} />
-          <Circle x={w / 2} y={h / 2} radius={7} stroke={STROKE} strokeWidth={1.5} />
-          <Text x={0} y={h - 1} width={w} align="center" text="IP54" fontSize={6} fill={STROKE} />
+          <Rect x={sw * 0.3} y={sw * 0.3} width={w - sw * 0.6} height={h - sw * 0.6} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <Socket2PT cx={cx} cy={cy * 0.92} r={r * 0.72} sw={sw * 0.9} />
         </>
       );
     case "priza_tv":
-      return labeledCircle(w, h, "TV");
+      return (
+        <>
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <Line points={[cx, cy + r * 0.15, cx, cy - r * 0.55]} stroke={STROKE} strokeWidth={sw * 0.85} />
+          <Line
+            points={[cx - r * 0.55, cy - r * 0.15, cx, cy - r * 0.65, cx + r * 0.55, cy - r * 0.15]}
+            stroke={STROKE}
+            strokeWidth={sw * 0.85}
+          />
+          <Text x={0} y={cy + r * 0.15} width={w} align="center" text="TV" fontSize={font} fontStyle="bold" fill={STROKE} fontFamily="Arial" />
+        </>
+      );
     case "priza_data":
-      return labeledRect(w, h, "DATA");
+      return (
+        <>
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <Rect
+            x={cx - r * 0.55}
+            y={cy - r * 0.35}
+            width={r * 1.1}
+            height={r * 0.7}
+            stroke={STROKE}
+            strokeWidth={sw * 0.8}
+            fill={FILL}
+          />
+          <Line points={[cx - r * 0.3, cy - r * 0.1, cx - r * 0.3, cy + r * 0.2]} stroke={STROKE} strokeWidth={sw * 0.7} />
+          <Line points={[cx, cy - r * 0.1, cx, cy + r * 0.2]} stroke={STROKE} strokeWidth={sw * 0.7} />
+          <Line points={[cx + r * 0.3, cy - r * 0.1, cx + r * 0.3, cy + r * 0.2]} stroke={STROKE} strokeWidth={sw * 0.7} />
+        </>
+      );
     case "priza_ac":
-      return labeledCircle(w, h, "AC");
+      return (
+        <>
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <Line
+            points={[
+              cx - r * 0.65, cy,
+              cx - r * 0.25, cy - r * 0.35,
+              cx + r * 0.1, cy + r * 0.35,
+              cx + r * 0.45, cy - r * 0.25,
+              cx + r * 0.65, cy,
+            ]}
+            stroke={STROKE}
+            strokeWidth={sw * 0.85}
+          />
+          <Text x={0} y={cy + r * 0.25} width={w} align="center" text="AC" fontSize={font} fontStyle="bold" fill={STROKE} fontFamily="Arial" />
+        </>
+      );
     case "priza_400v":
-      return labeledRect(w, h, "400V");
+      return (
+        <>
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <RegularPolygon x={cx} y={cy - r * 0.05} sides={3} radius={r * 0.55} stroke={STROKE} strokeWidth={sw * 0.9} fill={FILL} />
+          <Text x={0} y={h - font - 1} width={w} align="center" text="3~" fontSize={font} fontStyle="bold" fill={STROKE} fontFamily="Arial" />
+        </>
+      );
     case "intrerupator_simplu":
       return (
         <>
-          <Circle x={w / 2} y={h / 2} radius={9} stroke={STROKE} strokeWidth={1.7} fill={FILL} />
-          <Text x={0} y={h / 2 - 3.5} width={w} align="center" text="S1" fontSize={8} fontStyle="bold" fill={STROKE} />
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-55} sw={sw} />
+          <Circle x={cx} y={cy} radius={Math.max(0.8, r * 0.12)} fill={STROKE} />
         </>
       );
     case "intrerupator_dublu":
       return (
         <>
-          <Rect x={2} y={4} width={w - 4} height={h - 8} cornerRadius={3} stroke={STROKE} strokeWidth={1.7} fill={FILL} />
-          <Text x={0} y={h / 2 - 3.5} width={w} align="center" text="S2" fontSize={8} fontStyle="bold" fill={STROKE} />
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <SwitchLever cx={cx - r * 0.22} cy={cy} length={r * 0.85} angleDeg={-55} sw={sw} />
+          <SwitchLever cx={cx + r * 0.22} cy={cy} length={r * 0.85} angleDeg={-55} sw={sw} />
+          <Circle x={cx - r * 0.22} y={cy} radius={Math.max(0.7, r * 0.1)} fill={STROKE} />
+          <Circle x={cx + r * 0.22} y={cy} radius={Math.max(0.7, r * 0.1)} fill={STROKE} />
         </>
       );
     case "intrerupator_cap_scara":
       return (
         <>
-          <Circle x={w / 2} y={h / 2} radius={9} stroke={STROKE} strokeWidth={1.7} fill={FILL} />
-          <Text x={0} y={h / 2 - 3.5} width={w} align="center" text="CS" fontSize={8} fontStyle="bold" fill={STROKE} />
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-50} sw={sw} />
+          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={130} sw={sw} />
+          <Circle x={cx} y={cy} radius={Math.max(0.8, r * 0.12)} fill={STROKE} />
         </>
       );
     case "intrerupator_cruce":
       return (
         <>
-          <Circle x={w / 2} y={h / 2} radius={10} stroke={STROKE} strokeWidth={1.7} fill={FILL} />
-          <Line points={[6, 6, w - 6, h - 6]} stroke={STROKE} strokeWidth={1.6} />
-          <Line points={[w - 6, 6, 6, h - 6]} stroke={STROKE} strokeWidth={1.6} />
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-45} sw={sw} />
+          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={45} sw={sw} />
+          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={135} sw={sw} />
+          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-135} sw={sw} />
+          <Circle x={cx} y={cy} radius={Math.max(0.8, r * 0.12)} fill={STROKE} />
         </>
       );
     case "corp_iluminat":
       return (
         <>
-          <Circle x={w / 2} y={h / 2} radius={10} stroke={STROKE} strokeWidth={1.7} fill={FILL} />
-          <Line points={[w / 2, 3, w / 2, h - 3]} stroke={STROKE} strokeWidth={1.3} />
-          <Line points={[3, h / 2, w - 3, h / 2]} stroke={STROKE} strokeWidth={1.3} />
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <Line points={[cx, cy - r * 0.9, cx, cy + r * 0.9]} stroke={STROKE} strokeWidth={sw * 0.9} />
+          <Line points={[cx - r * 0.9, cy, cx + r * 0.9, cy]} stroke={STROKE} strokeWidth={sw * 0.9} />
         </>
       );
     case "spot":
       return (
         <>
-          <Circle x={w / 2} y={h / 2} radius={8} stroke={STROKE} strokeWidth={1.7} fill={FILL} />
-          <Circle x={w / 2} y={h / 2} radius={3} fill={STROKE} />
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <Circle x={cx} y={cy} radius={r * 0.32} stroke={STROKE} strokeWidth={sw * 0.8} fill={FILL} />
+          <Line points={[cx, cy + r * 0.4, cx, cy + r * 0.95]} stroke={STROKE} strokeWidth={sw * 0.8} />
+          <Line points={[cx - r * 0.28, cy + r * 0.75, cx + r * 0.28, cy + r * 0.75]} stroke={STROKE} strokeWidth={sw * 0.75} />
         </>
       );
     case "aplica":
       return (
         <>
-          <Arc x={w / 2} y={h - 4} innerRadius={0} outerRadius={12} angle={180} rotation={180} stroke={STROKE} strokeWidth={1.6} fill={FILL} />
-          <Line points={[4, h - 4, w - 4, h - 4]} stroke={STROKE} strokeWidth={1.6} />
+          <Line points={[sw, h - sw, w - sw, h - sw]} stroke={STROKE} strokeWidth={sw} />
+          <Arc
+            x={cx}
+            y={h - sw}
+            innerRadius={0}
+            outerRadius={r * 1.05}
+            angle={180}
+            rotation={180}
+            stroke={STROKE}
+            strokeWidth={sw}
+            fill={FILL}
+          />
+          <Line points={[cx, h - r * 1.2, cx, h - r * 0.55]} stroke={STROKE} strokeWidth={sw * 0.8} />
+          <Line points={[cx - r * 0.35, h - r * 0.9, cx + r * 0.35, h - r * 0.9]} stroke={STROKE} strokeWidth={sw * 0.75} />
         </>
       );
     case "pendul":
       return (
         <>
-          <Line points={[w / 2, 2, w / 2, 12]} stroke={STROKE} strokeWidth={1.5} />
-          <Circle x={w / 2} y={20} radius={8} stroke={STROKE} strokeWidth={1.6} fill={FILL} />
+          <Line points={[cx, 1, cx, h * 0.28]} stroke={STROKE} strokeWidth={sw * 0.9} />
+          <Circle x={cx} y={h * 0.62} radius={r * 0.85} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <Line points={[cx, h * 0.62 - r * 0.75, cx, h * 0.62 + r * 0.75]} stroke={STROKE} strokeWidth={sw * 0.8} />
+          <Line points={[cx - r * 0.75, h * 0.62, cx + r * 0.75, h * 0.62]} stroke={STROKE} strokeWidth={sw * 0.8} />
         </>
       );
     case "led":
       return (
         <>
-          <Rect x={2} y={4} width={w - 4} height={h - 8} stroke={STROKE} strokeWidth={1.5} fill={FILL} />
-          <Text x={0} y={h / 2 - 3} width={w} align="center" text="LED" fontSize={8} fontStyle="bold" fill={STROKE} />
+          <Rect x={sw * 0.4} y={sw * 0.4} width={w - sw * 0.8} height={h - sw * 0.8} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <Text x={0} y={cy - font * 0.35} width={w} align="center" text="LED" fontSize={font} fontStyle="bold" fill={STROKE} fontFamily="Arial" />
         </>
       );
     case "detector_fum":
-      return labeledCircle(w, h, "DF");
+      return (
+        <>
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <Text x={0} y={cy - font * 0.35} width={w} align="center" text="DF" fontSize={font} fontStyle="bold" fill={STROKE} fontFamily="Arial" />
+        </>
+      );
     case "detector_gaz":
-      return labeledCircle(w, h, "DG");
+      return (
+        <>
+          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+          <Text x={0} y={cy - font * 0.35} width={w} align="center" text="DG" fontSize={font} fontStyle="bold" fill={STROKE} fontFamily="Arial" />
+        </>
+      );
     case "tablou_electric":
       return (
         <>
-          <Rect x={2} y={2} width={w - 4} height={h - 4} stroke={STROKE} strokeWidth={2} fill={FILL} />
-          <Line points={[2, 12, w - 2, 12]} stroke={STROKE} strokeWidth={1.4} />
-          <Text x={0} y={h / 2} width={w} align="center" text="TE" fontSize={9} fontStyle="bold" fill={STROKE} />
+          <Rect x={sw * 0.3} y={sw * 0.3} width={w - sw * 0.6} height={h - sw * 0.6} stroke={STROKE} strokeWidth={sw * 1.25} fill={FILL} />
+          <Rect x={sw * 1.1} y={sw * 1.1} width={w - sw * 2.2} height={h - sw * 2.2} stroke={STROKE} strokeWidth={sw * 0.7} />
+          <Line points={[sw * 1.5, h * 0.35, w - sw * 1.5, h * 0.35]} stroke={STROKE} strokeWidth={sw * 0.75} />
+          <Line points={[sw * 1.5, h * 0.48, w - sw * 1.5, h * 0.48]} stroke={STROKE} strokeWidth={sw * 0.75} />
+          <Line points={[sw * 1.5, h * 0.61, w - sw * 1.5, h * 0.61]} stroke={STROKE} strokeWidth={sw * 0.75} />
+          <Text x={0} y={h - font - sw} width={w} align="center" text="TE" fontSize={font} fontStyle="bold" fill={STROKE} fontFamily="Arial" />
         </>
       );
     default:
-      return <Rect width={w} height={h} stroke={STROKE} />;
+      return <Rect width={w} height={h} stroke={STROKE} strokeWidth={sw} />;
   }
 }
 
-function labeledCircle(w: number, h: number, label: string) {
+function Socket2PT({ cx, cy, r, sw }: { cx: number; cy: number; r: number; sw: number }) {
+  const gap = r * 0.2;
+  const bar = r * 0.55;
   return (
     <>
-      <Circle x={w / 2} y={h / 2} radius={Math.min(w, h) / 2 - 2} stroke={STROKE} strokeWidth={1.7} fill={FILL} />
-      <Text x={0} y={h / 2 - 3.5} width={w} align="center" text={label} fontSize={label.length > 3 ? 7 : 8} fontStyle="bold" fill={STROKE} />
+      <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+      <Line points={[cx - bar, cy - gap, cx + bar, cy - gap]} stroke={STROKE} strokeWidth={sw * 0.85} />
+      <Line points={[cx - bar, cy + gap * 0.1, cx + bar, cy + gap * 0.1]} stroke={STROKE} strokeWidth={sw * 0.85} />
+      <Line points={[cx, cy + r * 0.25, cx, cy + r * 0.6]} stroke={STROKE} strokeWidth={sw * 0.75} />
+      <Line points={[cx - r * 0.28, cy + r * 0.6, cx + r * 0.28, cy + r * 0.6]} stroke={STROKE} strokeWidth={sw * 0.75} />
+      <Line points={[cx - r * 0.18, cy + r * 0.72, cx + r * 0.18, cy + r * 0.72]} stroke={STROKE} strokeWidth={sw * 0.7} />
     </>
   );
 }
 
-function labeledRect(w: number, h: number, label: string) {
-  return (
-    <>
-      <Rect x={2} y={3} width={w - 4} height={h - 6} stroke={STROKE} strokeWidth={1.7} fill={FILL} />
-      <Text x={0} y={h / 2 - 3.5} width={w} align="center" text={label} fontSize={label.length > 3 ? 7 : 8} fontStyle="bold" fill={STROKE} />
-    </>
-  );
+function SwitchLever({
+  cx,
+  cy,
+  length,
+  angleDeg,
+  sw,
+}: {
+  cx: number;
+  cy: number;
+  length: number;
+  angleDeg: number;
+  sw: number;
+}) {
+  const rad = (angleDeg * Math.PI) / 180;
+  const x2 = cx + Math.cos(rad) * length;
+  const y2 = cy + Math.sin(rad) * length;
+  return <Line points={[cx, cy, x2, y2]} stroke={STROKE} strokeWidth={sw} lineCap="round" />;
 }

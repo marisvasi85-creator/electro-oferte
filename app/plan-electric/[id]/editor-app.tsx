@@ -26,7 +26,7 @@ import {
   metersPerPixelFromCalibration,
 } from "../../../lib/plan-electric/cable";
 import type { CableSettings, PlanPage, PlanProject, SymbolInstance, SymbolType } from "../../../lib/plan-electric/types";
-import { getSymbolDefinition } from "../../../lib/plan-electric/symbols";
+import { getSymbolDefinition, DEFAULT_SYMBOL_SCALE } from "../../../lib/plan-electric/symbols";
 import { supabase } from "../../../lib/supabase";
 
 const CanvasEditor = dynamic(
@@ -202,7 +202,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
       x: x ?? page.width / 2,
       y: y ?? page.height / 2,
       rotation: 0,
-      scale: 1,
+      scale: DEFAULT_SYMBOL_SCALE,
       label: def.label,
       notes: "",
       metadata: {},
