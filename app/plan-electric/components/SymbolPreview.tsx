@@ -7,6 +7,8 @@ const S = "#e5e7eb";
 const R = SYMBOL_COLORS.outlet;
 const G = SYMBOL_COLORS.fixtureGreen;
 const Y = SYMBOL_COLORS.led;
+const B = SYMBOL_COLORS.switch;
+const P = SYMBOL_COLORS.panel;
 
 /** SVG previews matching Romanian normative Konva glyphs. */
 export function SymbolPreview({ type }: { type: SymbolType }) {
@@ -100,16 +102,16 @@ export function SymbolPreview({ type }: { type: SymbolType }) {
     case "corp_iluminat":
       return (
         <svg viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
-          <path d="M16 6 V26 M6 16 H26" fill="none" stroke={S} strokeWidth="1.4" />
+          <circle cx="16" cy="16" r="10" fill="none" stroke={G} strokeWidth="1.6" />
+          <path d="M16 6 V26 M6 16 H26" fill="none" stroke={G} strokeWidth="1.4" />
         </svg>
       );
     case "spot":
       return (
         <svg viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="9" fill="none" stroke={S} strokeWidth="1.6" />
-          <circle cx="16" cy="16" r="3" fill="none" stroke={S} strokeWidth="1.2" />
-          <path d="M16 19 V25 M13 23 H19" fill="none" stroke={S} strokeWidth="1.2" />
+          <circle cx="16" cy="16" r="9" fill="none" stroke={G} strokeWidth="1.6" />
+          <circle cx="16" cy="16" r="3" fill="none" stroke={G} strokeWidth="1.2" />
+          <path d="M16 19 V25 M13 23 H19" fill="none" stroke={G} strokeWidth="1.2" />
         </svg>
       );
     case "aplica":
@@ -154,10 +156,10 @@ export function SymbolPreview({ type }: { type: SymbolType }) {
     case "tablou_electric":
       return (
         <svg viewBox="0 0 34 38" aria-hidden="true">
-          <rect x="5" y="3" width="24" height="32" fill="none" stroke={S} strokeWidth="2" />
-          <rect x="8" y="6" width="18" height="26" fill="none" stroke={S} strokeWidth="1.1" />
-          <path d="M10 14 H24 M10 18 H24 M10 22 H24" fill="none" stroke={S} strokeWidth="1.2" />
-          <text x="17" y="30" textAnchor="middle" fill={S} fontSize="8" fontFamily="Arial">TE</text>
+          <rect x="5" y="3" width="24" height="32" fill="none" stroke={P} strokeWidth="2" />
+          <rect x="8" y="6" width="18" height="26" fill="none" stroke={P} strokeWidth="1.1" />
+          <path d="M10 14 H24 M10 18 H24 M10 22 H24" fill="none" stroke={P} strokeWidth="1.2" />
+          <text x="17" y="30" textAnchor="middle" fill={P} fontSize="8" fontFamily="Arial">TE</text>
         </svg>
       );
     default:
@@ -185,9 +187,9 @@ function switchPreview(gangs: 1 | 2 | 3, variant: "normal" | "cs" | "cruce") {
           : `M${cx} ${cy} L${cx + r * 0.7} ${cy - r * 0.55}`;
     return (
       <g key={`${variant}-${index}`}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke={S} strokeWidth="1.5" />
-        <circle cx={cx} cy={cy} r="1.2" fill={S} />
-        <path d={levers} fill="none" stroke={S} strokeWidth="1.4" strokeLinecap="round" />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={B} strokeWidth="1.5" />
+        <circle cx={cx} cy={cy} r="1.2" fill={B} />
+        <path d={levers} fill="none" stroke={B} strokeWidth="1.4" strokeLinecap="round" />
       </g>
     );
   });

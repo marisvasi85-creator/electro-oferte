@@ -20,7 +20,9 @@ test("ships Plan Electric module surfaces", async () => {
   assert.match(symbols, /Priză triplă/);
   assert.match(symbols, /intrerupator_triplu_cruce/);
   assert.match(symbols, /DEFAULT_LED_LENGTH_PX/);
-  assert.match(symbols, /outlet: "#dc2626"/);
+  assert.match(symbols, /switch: "#2563eb"/);
+  assert.match(symbols, /panel: "#dc2626"/);
+  assert.match(symbols, /fixtureGreen: "#16a34a"/);
   assert.match(migration, /plan_projects/);
   assert.match(migration, /plan_symbol_instances/);
   assert.match(migration, /plan-backgrounds/);
