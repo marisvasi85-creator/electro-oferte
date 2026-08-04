@@ -26,6 +26,8 @@ button { cursor: pointer; }
 nav { display: grid; gap: 7px; padding-top: 25px; }
 nav button { color: #b8c0ce; border: 0; background: transparent; border-radius: 9px; padding: 11px 12px; text-align: left; display: flex; align-items: center; gap: 12px; font-size: 13px; }
 nav button:hover, nav button.active { color: #fff; background: #29354c; }
+nav a.nav-link-button { color: #b8c0ce; border: 0; background: transparent; border-radius: 9px; padding: 11px 12px; text-align: left; display: flex; align-items: center; gap: 12px; font-size: 13px; text-decoration: none; }
+nav a.nav-link-button:hover { color: #fff; background: #29354c; }
 .nav-icon { width: 18px; color: #94a3b8; font-size: 18px; text-align: center; }
 .count { margin-left: auto; color: #b7c8ef; background: #34415b; border-radius: 20px; padding: 2px 8px; font-size: 11px; }
 .company-card { margin-top: auto; border-top: 1px solid #2e3950; padding: 18px 8px 4px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }

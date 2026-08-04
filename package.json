@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs && node --experimental-strip-types --test tests/ro-validation.test.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs && node --experimental-strip-types --test tests/ro-validation.test.mjs && node --test tests/plan-electric.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
@@ -18,10 +18,15 @@
     "@supabase/supabase-js": "^2.110.8",
     "drizzle-orm": "0.45.2",
     "fflate": "^0.8.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "konva": "^10.3.0",
     "next": "16.2.6",
     "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.2.108",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "react-konva": "^19.2.5",
     "read-excel-file": "^9.3.4"
   },
   "devDependencies": {

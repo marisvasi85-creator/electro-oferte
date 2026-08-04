@@ -997,6 +997,7 @@ export default function Home() {
           <button className={view === "offers" ? "active" : ""} onClick={() => navigate("offers")}><Icon>▤</Icon>Oferte <span className="count">{savedOffers.length}</span></button>
           <button className={view === "clients" ? "active" : ""} onClick={() => navigate("clients")}><Icon>♙</Icon>Clienți <span className="count">{clients.length}</span></button>
           <button className={view === "catalog" ? "active" : ""} onClick={() => navigate("catalog")}><Icon>◇</Icon>Catalog <span className="count">{catalog.length}</span></button>
+          <a className="nav-link-button" href="/plan-electric"><Icon>⌁</Icon>Plan Electric</a>
           <button className={view === "settings" ? "active" : ""} onClick={() => navigate("settings")}><Icon>⚙</Icon>Setări firmă</button>
         </nav>
         <div className="company-card">
