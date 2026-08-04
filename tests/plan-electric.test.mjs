@@ -16,8 +16,11 @@ test("ships Plan Electric module surfaces", async () => {
   assert.match(symbols, /priza_simpla/);
   assert.match(symbols, /tablou_electric/);
   assert.match(symbols, /Priză 2P\+T/);
-  assert.match(symbols, /Întrerupător unipolar/);
-  assert.match(symbols, /Comutator cap-scară/);
+  assert.match(symbols, /intrerupator_triplu/);
+  assert.match(symbols, /intrerupator_dublu_cs/);
+  assert.match(symbols, /intrerupator_triplu_cruce/);
+  assert.match(symbols, /Simplu c\.s\./);
+  assert.match(symbols, /Triplu cruce/);
   assert.match(migration, /plan_projects/);
   assert.match(migration, /plan_symbol_instances/);
   assert.match(migration, /plan-backgrounds/);

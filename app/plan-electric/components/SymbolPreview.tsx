@@ -65,38 +65,23 @@ export function SymbolPreview({ type }: { type: SymbolType }) {
         </svg>
       );
     case "intrerupator_simplu":
-      return (
-        <svg viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
-          <circle cx="16" cy="16" r="1.5" fill={S} />
-          <path d="M16 16 L22 9" fill="none" stroke={S} strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      );
+      return switchPreview(1, "normal");
     case "intrerupator_dublu":
-      return (
-        <svg viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
-          <circle cx="13.5" cy="16" r="1.2" fill={S} />
-          <circle cx="18.5" cy="16" r="1.2" fill={S} />
-          <path d="M13.5 16 L19 9 M18.5 16 L24 9" fill="none" stroke={S} strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-      );
+      return switchPreview(2, "normal");
+    case "intrerupator_triplu":
+      return switchPreview(3, "normal");
     case "intrerupator_cap_scara":
-      return (
-        <svg viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
-          <circle cx="16" cy="16" r="1.5" fill={S} />
-          <path d="M16 16 L22 10 M16 16 L10 22" fill="none" stroke={S} strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      );
+      return switchPreview(1, "cs");
+    case "intrerupator_dublu_cs":
+      return switchPreview(2, "cs");
+    case "intrerupator_triplu_cs":
+      return switchPreview(3, "cs");
     case "intrerupator_cruce":
-      return (
-        <svg viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
-          <circle cx="16" cy="16" r="1.5" fill={S} />
-          <path d="M10 10 L22 22 M22 10 L10 22" fill="none" stroke={S} strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-      );
+      return switchPreview(1, "cruce");
+    case "intrerupator_dublu_cruce":
+      return switchPreview(2, "cruce");
+    case "intrerupator_triplu_cruce":
+      return switchPreview(3, "cruce");
     case "corp_iluminat":
       return (
         <svg viewBox="0 0 32 32" aria-hidden="true">
@@ -165,4 +150,33 @@ export function SymbolPreview({ type }: { type: SymbolType }) {
         </svg>
       );
   }
+}
+
+function switchPreview(gangs: 1 | 2 | 3, variant: "normal" | "cs" | "cruce") {
+  const width = gangs === 1 ? 32 : gangs === 2 ? 44 : 56;
+  const gap = gangs === 1 ? 0 : 2;
+  const cell = (width - gap * (gangs - 1)) / gangs;
+  const r = Math.min(cell, 32) / 2 - 2.5;
+  const modules = Array.from({ length: gangs }, (_, index) => {
+    const cx = cell * index + cell / 2 + gap * index;
+    const cy = 16;
+    const levers =
+      variant === "cs"
+        ? `M${cx} ${cy} L${cx + r * 0.7} ${cy - r * 0.55} M${cx} ${cy} L${cx - r * 0.7} ${cy + r * 0.55}`
+        : variant === "cruce"
+          ? `M${cx - r * 0.6} ${cy - r * 0.6} L${cx + r * 0.6} ${cy + r * 0.6} M${cx + r * 0.6} ${cy - r * 0.6} L${cx - r * 0.6} ${cy + r * 0.6}`
+          : `M${cx} ${cy} L${cx + r * 0.7} ${cy - r * 0.55}`;
+    return (
+      <g key={`${variant}-${index}`}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={S} strokeWidth="1.5" />
+        <circle cx={cx} cy={cy} r="1.2" fill={S} />
+        <path d={levers} fill="none" stroke={S} strokeWidth="1.4" strokeLinecap="round" />
+      </g>
+    );
+  });
+  return (
+    <svg viewBox={`0 0 ${width} 32`} aria-hidden="true">
+      {modules}
+    </svg>
+  );
 }

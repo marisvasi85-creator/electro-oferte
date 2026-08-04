@@ -151,43 +151,23 @@ function renderGlyph(type: SymbolType, w: number, h: number, sw: number) {
         </>
       );
     case "intrerupator_simplu":
-      return (
-        <>
-          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
-          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-55} sw={sw} />
-          <Circle x={cx} y={cy} radius={Math.max(0.8, r * 0.12)} fill={STROKE} />
-        </>
-      );
+      return <SwitchBank w={w} h={h} sw={sw} gangs={1} variant="normal" />;
     case "intrerupator_dublu":
-      return (
-        <>
-          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
-          <SwitchLever cx={cx - r * 0.22} cy={cy} length={r * 0.85} angleDeg={-55} sw={sw} />
-          <SwitchLever cx={cx + r * 0.22} cy={cy} length={r * 0.85} angleDeg={-55} sw={sw} />
-          <Circle x={cx - r * 0.22} y={cy} radius={Math.max(0.7, r * 0.1)} fill={STROKE} />
-          <Circle x={cx + r * 0.22} y={cy} radius={Math.max(0.7, r * 0.1)} fill={STROKE} />
-        </>
-      );
+      return <SwitchBank w={w} h={h} sw={sw} gangs={2} variant="normal" />;
+    case "intrerupator_triplu":
+      return <SwitchBank w={w} h={h} sw={sw} gangs={3} variant="normal" />;
     case "intrerupator_cap_scara":
-      return (
-        <>
-          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
-          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-50} sw={sw} />
-          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={130} sw={sw} />
-          <Circle x={cx} y={cy} radius={Math.max(0.8, r * 0.12)} fill={STROKE} />
-        </>
-      );
+      return <SwitchBank w={w} h={h} sw={sw} gangs={1} variant="cs" />;
+    case "intrerupator_dublu_cs":
+      return <SwitchBank w={w} h={h} sw={sw} gangs={2} variant="cs" />;
+    case "intrerupator_triplu_cs":
+      return <SwitchBank w={w} h={h} sw={sw} gangs={3} variant="cs" />;
     case "intrerupator_cruce":
-      return (
-        <>
-          <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
-          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-45} sw={sw} />
-          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={45} sw={sw} />
-          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={135} sw={sw} />
-          <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-135} sw={sw} />
-          <Circle x={cx} y={cy} radius={Math.max(0.8, r * 0.12)} fill={STROKE} />
-        </>
-      );
+      return <SwitchBank w={w} h={h} sw={sw} gangs={1} variant="cruce" />;
+    case "intrerupator_dublu_cruce":
+      return <SwitchBank w={w} h={h} sw={sw} gangs={2} variant="cruce" />;
+    case "intrerupator_triplu_cruce":
+      return <SwitchBank w={w} h={h} sw={sw} gangs={3} variant="cruce" />;
     case "corp_iluminat":
       return (
         <>
@@ -281,6 +261,78 @@ function Socket2PT({ cx, cy, r, sw }: { cx: number; cy: number; r: number; sw: n
       <Line points={[cx, cy + r * 0.25, cx, cy + r * 0.6]} stroke={STROKE} strokeWidth={sw * 0.75} />
       <Line points={[cx - r * 0.28, cy + r * 0.6, cx + r * 0.28, cy + r * 0.6]} stroke={STROKE} strokeWidth={sw * 0.75} />
       <Line points={[cx - r * 0.18, cy + r * 0.72, cx + r * 0.18, cy + r * 0.72]} stroke={STROKE} strokeWidth={sw * 0.7} />
+    </>
+  );
+}
+
+function SwitchBank({
+  w,
+  h,
+  sw,
+  gangs,
+  variant,
+}: {
+  w: number;
+  h: number;
+  sw: number;
+  gangs: 1 | 2 | 3;
+  variant: "normal" | "cs" | "cruce";
+}) {
+  const gap = gangs === 1 ? 0 : Math.max(1, w * 0.04);
+  const cell = (w - gap * (gangs - 1)) / gangs;
+  const r = Math.min(cell, h) / 2 - sw * 0.35;
+  const cy = h / 2;
+  const modules = [];
+  for (let i = 0; i < gangs; i += 1) {
+    const cx = cell * i + cell / 2 + gap * i;
+    modules.push(
+      <SwitchModule key={`sw-${variant}-${i}`} cx={cx} cy={cy} r={r} sw={sw} variant={variant} />,
+    );
+  }
+  return <>{modules}</>;
+}
+
+function SwitchModule({
+  cx,
+  cy,
+  r,
+  sw,
+  variant,
+}: {
+  cx: number;
+  cy: number;
+  r: number;
+  sw: number;
+  variant: "normal" | "cs" | "cruce";
+}) {
+  const hub = Math.max(0.7, r * 0.12);
+  if (variant === "cs") {
+    return (
+      <>
+        <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+        <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-50} sw={sw} />
+        <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={130} sw={sw} />
+        <Circle x={cx} y={cy} radius={hub} fill={STROKE} />
+      </>
+    );
+  }
+  if (variant === "cruce") {
+    return (
+      <>
+        <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+        <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-45} sw={sw} />
+        <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={45} sw={sw} />
+        <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={135} sw={sw} />
+        <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-135} sw={sw} />
+        <Circle x={cx} y={cy} radius={hub} fill={STROKE} />
+      </>
+    );
+  }
+  return (
+    <>
+      <Circle x={cx} y={cy} radius={r} stroke={STROKE} strokeWidth={sw} fill={FILL} />
+      <SwitchLever cx={cx} cy={cy} length={r * 0.85} angleDeg={-55} sw={sw} />
+      <Circle x={cx} y={cy} radius={hub} fill={STROKE} />
     </>
   );
 }
