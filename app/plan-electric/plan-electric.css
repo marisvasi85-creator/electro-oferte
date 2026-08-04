@@ -1,0 +1,177 @@
+/* Plan Electric — dark professional workspace */
+
+.pe-app {
+  --pe-bg: #0f141c;
+  --pe-panel: #171e29;
+  --pe-line: #2a3444;
+  --pe-text: #e8edf5;
+  --pe-muted: #9aa6b8;
+  --pe-accent: #38bdf8;
+  --pe-accent-2: #f59e0b;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, #1a2435 0, transparent 40%),
+    linear-gradient(180deg, #101622 0%, #0b1017 100%);
+  color: var(--pe-text);
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+.pe-loading {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.pe-loading a, .pe-back {
+  color: var(--pe-accent);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pe-projects-page { padding: 28px; }
+.pe-projects-header h1 { margin: 8px 0 6px; font-size: 30px; letter-spacing: -.4px; }
+.pe-projects-header p { margin: 0; color: var(--pe-muted); max-width: 620px; line-height: 1.5; }
+.pe-projects-grid {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 22px;
+}
+.pe-create-card, .pe-project-list {
+  background: color-mix(in srgb, var(--pe-panel) 92%, black);
+  border: 1px solid var(--pe-line);
+  border-radius: 16px;
+  padding: 22px;
+}
+.pe-create-card h2, .pe-project-list h2 { margin: 0 0 16px; font-size: 18px; }
+.pe-create-card label, .pe-inspector label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--pe-muted);
+}
+.pe-create-card input, .pe-create-card textarea,
+.pe-inspector input, .pe-inspector textarea {
+  width: 100%;
+  border: 1px solid var(--pe-line);
+  background: #0d121a;
+  color: var(--pe-text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+}
+.pe-primary, .pe-toolbar button, .pe-inspector-actions button, .pe-project-actions button, .pe-project-actions a {
+  border: 1px solid var(--pe-line);
+  background: #222b3a;
+  color: var(--pe-text);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.pe-primary { background: linear-gradient(180deg, #39bdf8, #0284c7); border-color: #0284c7; color: #031525; width: 100%; }
+.pe-message { margin: 8px 0 12px; color: #fca5a5; font-size: 12px; }
+.pe-muted { color: var(--pe-muted); font-size: 13px; }
+.pe-project-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--pe-line);
+}
+.pe-project-row:first-of-type { border-top: 0; }
+.pe-project-row strong, .pe-project-row small { display: block; }
+.pe-project-row small { color: var(--pe-muted); margin-top: 4px; font-size: 12px; }
+.pe-project-actions { display: flex; gap: 8px; align-items: center; }
+
+.pe-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--pe-line);
+  background: rgba(15, 20, 28, .92);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+}
+.pe-toolbar-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pe-toolbar-left strong { font-size: 14px; }
+.pe-busy { color: var(--pe-accent-2); font-size: 11px; }
+.pe-toolbar-actions, .pe-export-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.pe-toolbar button.active { border-color: var(--pe-accent); color: var(--pe-accent); }
+.pe-toolbar button:disabled { opacity: .45; cursor: not-allowed; }
+
+.pe-workspace {
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  min-height: calc(100vh - 58px);
+}
+.pe-sidebar, .pe-inspector {
+  border-right: 1px solid var(--pe-line);
+  background: rgba(17, 24, 34, .96);
+  padding: 14px;
+  overflow: auto;
+  max-height: calc(100vh - 58px);
+}
+.pe-inspector { border-right: 0; border-left: 1px solid var(--pe-line); }
+.pe-panel-title { display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px; }
+.pe-panel-title span { font-size: 13px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; color: #cbd5e1; }
+.pe-panel-title small { color: var(--pe-muted); font-size: 11px; }
+.pe-symbol-group { margin-bottom: 18px; }
+.pe-symbol-group h3 { margin: 0 0 8px; font-size: 12px; color: var(--pe-accent); letter-spacing: .08em; text-transform: uppercase; }
+.pe-symbol-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pe-symbol-card {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--pe-line);
+  background: #121925;
+  color: var(--pe-text);
+  cursor: grab;
+}
+.pe-symbol-card svg { width: 34px; height: 30px; }
+.pe-symbol-card span { font-size: 10px; text-align: center; color: #cbd5e1; line-height: 1.25; }
+.pe-symbol-card:hover { border-color: var(--pe-accent); }
+
+.pe-canvas-wrap { position: relative; min-width: 0; background: #0a0e14; }
+.pe-canvas-shell { width: 100%; height: calc(100vh - 58px); overflow: hidden; }
+.pe-canvas-shell.panning { cursor: grab; }
+.pe-legend {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: min(260px, calc(100% - 24px));
+  background: rgba(15, 20, 28, .92);
+  border: 1px solid var(--pe-line);
+  border-radius: 12px;
+  padding: 12px;
+  backdrop-filter: blur(6px);
+}
+.pe-legend strong { display: block; margin-bottom: 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--pe-accent); }
+.pe-legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pe-legend li { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: center; font-size: 11px; color: #dbe4f0; }
+.pe-legend-icon { width: 28px; height: 24px; display: grid; place-items: center; }
+.pe-legend-icon svg { width: 22px; height: 20px; }
+.pe-inspector-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.pe-inspector-actions .danger { border-color: #7f1d1d; color: #fecaca; }
+
+@media (max-width: 1100px) {
+  .pe-workspace { grid-template-columns: 220px 1fr; }
+  .pe-inspector { display: none; }
+}
+@media (max-width: 820px) {
+  .pe-projects-grid { grid-template-columns: 1fr; }
+  .pe-workspace { grid-template-columns: 1fr; }
+  .pe-sidebar { display: none; }
+  .pe-toolbar { flex-direction: column; align-items: stretch; }
+}
