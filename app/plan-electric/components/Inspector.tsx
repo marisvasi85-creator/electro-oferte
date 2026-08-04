@@ -91,7 +91,7 @@ export function Inspector({ symbol, settings, onChange, onDelete, onDuplicate }:
         Scară simbol
         <input
           type="number"
-          min={0.4}
+          min={0.3}
           max={3}
           step={0.1}
           value={symbol.scale}

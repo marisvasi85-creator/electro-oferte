@@ -133,8 +133,8 @@ export function snapPoint(
   y: number,
   guides: { vertical: number[]; horizontal: number[] },
   enabled: boolean,
-  threshold = 12,
-  offset = 14,
+  threshold = 8,
+  offset = 10,
 ) {
   if (!enabled) return { x, y };
   let nextX = x;
