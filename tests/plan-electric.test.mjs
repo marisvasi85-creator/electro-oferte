@@ -15,6 +15,9 @@ test("ships Plan Electric module surfaces", async () => {
   assert.match(editorPage, /PlanEditorApp/);
   assert.match(symbols, /priza_simpla/);
   assert.match(symbols, /tablou_electric/);
+  assert.match(symbols, /Priză 2P\+T/);
+  assert.match(symbols, /Întrerupător unipolar/);
+  assert.match(symbols, /Comutator cap-scară/);
   assert.match(migration, /plan_projects/);
   assert.match(migration, /plan_symbol_instances/);
   assert.match(migration, /plan-backgrounds/);

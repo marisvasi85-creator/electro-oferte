@@ -2,67 +2,167 @@
 
 import type { SymbolType } from "../../../lib/plan-electric/types";
 
-/** Lightweight SVG previews for the library panel (not Konva). */
+const S = "#e5e7eb";
+
+/** SVG previews matching Romanian normative Konva glyphs. */
 export function SymbolPreview({ type }: { type: SymbolType }) {
-  const common = { fill: "none", stroke: "#e5e7eb", strokeWidth: 1.6 } as const;
   switch (type) {
     case "priza_simpla":
-      return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" {...common} /><circle cx="12.5" cy="16" r="1.3" fill="#e5e7eb" stroke="none" /><circle cx="19.5" cy="16" r="1.3" fill="#e5e7eb" stroke="none" /></svg>;
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <path d="M10 13.5 H22 M10 16 H22" fill="none" stroke={S} strokeWidth="1.4" />
+          <path d="M16 18.5 V22.5 M13.2 22.5 H18.8 M13.8 24 H18.2" fill="none" stroke={S} strokeWidth="1.2" />
+        </svg>
+      );
     case "priza_dubla":
-      return <svg viewBox="0 0 36 32" aria-hidden="true"><circle cx="12" cy="16" r="7" {...common} /><circle cx="24" cy="16" r="7" {...common} /></svg>;
+      return (
+        <svg viewBox="0 0 40 32" aria-hidden="true">
+          <circle cx="12" cy="16" r="8" fill="none" stroke={S} strokeWidth="1.5" />
+          <path d="M7.5 14 H16.5 M7.5 16 H16.5 M12 18 V21 M10 21 H14" fill="none" stroke={S} strokeWidth="1.2" />
+          <circle cx="28" cy="16" r="8" fill="none" stroke={S} strokeWidth="1.5" />
+          <path d="M23.5 14 H32.5 M23.5 16 H32.5 M28 18 V21 M26 21 H30" fill="none" stroke={S} strokeWidth="1.2" />
+        </svg>
+      );
     case "priza_ip54":
-      return <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="6" y="6" width="20" height="20" {...common} /><circle cx="16" cy="16" r="6" {...common} /></svg>;
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="4" y="4" width="24" height="24" fill="none" stroke={S} strokeWidth="1.6" />
+          <circle cx="16" cy="15" r="7" fill="none" stroke={S} strokeWidth="1.4" />
+          <path d="M11 13 H21 M11 15 H21 M16 17 V20 M14 20 H18" fill="none" stroke={S} strokeWidth="1.1" />
+        </svg>
+      );
     case "priza_tv":
-      return labelCircle("TV");
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <path d="M16 18 V10 M10 14 L16 9 L22 14" fill="none" stroke={S} strokeWidth="1.3" />
+          <text x="16" y="24" textAnchor="middle" fill={S} fontSize="7" fontFamily="Arial">TV</text>
+        </svg>
+      );
     case "priza_data":
-      return labelRect("DATA");
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <rect x="10" y="12" width="12" height="8" fill="none" stroke={S} strokeWidth="1.2" />
+          <path d="M12 14 V18 M16 14 V18 M20 14 V18" fill="none" stroke={S} strokeWidth="1.1" />
+        </svg>
+      );
     case "priza_ac":
-      return labelCircle("AC");
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <path d="M9 16 L12 12 L16 20 L20 13 L23 16" fill="none" stroke={S} strokeWidth="1.3" />
+          <text x="16" y="25" textAnchor="middle" fill={S} fontSize="7" fontFamily="Arial">AC</text>
+        </svg>
+      );
     case "priza_400v":
-      return labelRect("400V");
+      return (
+        <svg viewBox="0 0 34 32" aria-hidden="true">
+          <circle cx="17" cy="15" r="11" fill="none" stroke={S} strokeWidth="1.6" />
+          <path d="M17 8 L23 19 H11 Z" fill="none" stroke={S} strokeWidth="1.4" />
+          <text x="17" y="30" textAnchor="middle" fill={S} fontSize="6" fontFamily="Arial">400V</text>
+        </svg>
+      );
     case "intrerupator_simplu":
-      return labelCircle("S1");
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <circle cx="16" cy="16" r="1.5" fill={S} />
+          <path d="M16 16 L22 9" fill="none" stroke={S} strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      );
     case "intrerupator_dublu":
-      return labelRect("S2");
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <circle cx="13.5" cy="16" r="1.2" fill={S} />
+          <circle cx="18.5" cy="16" r="1.2" fill={S} />
+          <path d="M13.5 16 L19 9 M18.5 16 L24 9" fill="none" stroke={S} strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      );
     case "intrerupator_cap_scara":
-      return labelCircle("CS");
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <circle cx="16" cy="16" r="1.5" fill={S} />
+          <path d="M16 16 L22 10 M16 16 L10 22" fill="none" stroke={S} strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      );
     case "intrerupator_cruce":
-      return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" {...common} /><path d="M9 9 L23 23 M23 9 L9 23" {...common} /></svg>;
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <circle cx="16" cy="16" r="1.5" fill={S} />
+          <path d="M10 10 L22 22 M22 10 L10 22" fill="none" stroke={S} strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      );
     case "corp_iluminat":
-      return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9" {...common} /><path d="M16 5 V27 M5 16 H27" {...common} /></svg>;
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <path d="M16 6 V26 M6 16 H26" fill="none" stroke={S} strokeWidth="1.4" />
+        </svg>
+      );
     case "spot":
-      return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="8" {...common} /><circle cx="16" cy="16" r="2.5" fill="#e5e7eb" stroke="none" /></svg>;
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="9" fill="none" stroke={S} strokeWidth="1.6" />
+          <circle cx="16" cy="16" r="3" fill="none" stroke={S} strokeWidth="1.2" />
+          <path d="M16 19 V25 M13 23 H19" fill="none" stroke={S} strokeWidth="1.2" />
+        </svg>
+      );
     case "aplica":
-      return <svg viewBox="0 0 32 28" aria-hidden="true"><path d="M6 22 A10 10 0 0 1 26 22" {...common} /><path d="M6 22 H26" {...common} /></svg>;
+      return (
+        <svg viewBox="0 0 32 28" aria-hidden="true">
+          <path d="M4 24 H28" fill="none" stroke={S} strokeWidth="1.6" />
+          <path d="M6 24 A10 10 0 0 1 26 24" fill="none" stroke={S} strokeWidth="1.6" />
+          <path d="M16 14 V18 M12 16 H20" fill="none" stroke={S} strokeWidth="1.2" />
+        </svg>
+      );
     case "pendul":
-      return <svg viewBox="0 0 32 34" aria-hidden="true"><path d="M16 3 V12" {...common} /><circle cx="16" cy="20" r="7" {...common} /></svg>;
+      return (
+        <svg viewBox="0 0 32 34" aria-hidden="true">
+          <path d="M16 2 V10" fill="none" stroke={S} strokeWidth="1.5" />
+          <circle cx="16" cy="20" r="8" fill="none" stroke={S} strokeWidth="1.6" />
+          <path d="M16 12 V28 M8 20 H24" fill="none" stroke={S} strokeWidth="1.3" />
+        </svg>
+      );
     case "led":
-      return labelRect("LED");
+      return (
+        <svg viewBox="0 0 38 18" aria-hidden="true">
+          <rect x="2" y="2" width="34" height="14" fill="none" stroke={S} strokeWidth="1.5" />
+          <text x="19" y="12" textAnchor="middle" fill={S} fontSize="7" fontFamily="Arial">LED</text>
+        </svg>
+      );
     case "detector_fum":
-      return labelCircle("DF");
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <text x="16" y="20" textAnchor="middle" fill={S} fontSize="8" fontFamily="Arial">DF</text>
+        </svg>
+      );
     case "detector_gaz":
-      return labelCircle("DG");
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="10" fill="none" stroke={S} strokeWidth="1.6" />
+          <text x="16" y="20" textAnchor="middle" fill={S} fontSize="8" fontFamily="Arial">DG</text>
+        </svg>
+      );
     case "tablou_electric":
-      return <svg viewBox="0 0 34 38" aria-hidden="true"><rect x="6" y="4" width="22" height="30" {...common} /><path d="M6 14 H28" {...common} /><text x="17" y="26" textAnchor="middle" fill="#e5e7eb" fontSize="8" fontFamily="Arial">TE</text></svg>;
+      return (
+        <svg viewBox="0 0 34 38" aria-hidden="true">
+          <rect x="5" y="3" width="24" height="32" fill="none" stroke={S} strokeWidth="2" />
+          <rect x="8" y="6" width="18" height="26" fill="none" stroke={S} strokeWidth="1.1" />
+          <path d="M10 14 H24 M10 18 H24 M10 22 H24" fill="none" stroke={S} strokeWidth="1.2" />
+          <text x="17" y="30" textAnchor="middle" fill={S} fontSize="8" fontFamily="Arial">TE</text>
+        </svg>
+      );
     default:
-      return <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="6" y="6" width="20" height="20" {...common} /></svg>;
+      return (
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="6" y="6" width="20" height="20" fill="none" stroke={S} strokeWidth="1.6" />
+        </svg>
+      );
   }
-}
-
-function labelCircle(label: string) {
-  return (
-    <svg viewBox="0 0 32 32" aria-hidden="true">
-      <circle cx="16" cy="16" r="9" fill="none" stroke="#e5e7eb" strokeWidth="1.6" />
-      <text x="16" y="19" textAnchor="middle" fill="#e5e7eb" fontSize="7" fontFamily="Arial">{label}</text>
-    </svg>
-  );
-}
-
-function labelRect(label: string) {
-  return (
-    <svg viewBox="0 0 36 30" aria-hidden="true">
-      <rect x="4" y="5" width="28" height="20" fill="none" stroke="#e5e7eb" strokeWidth="1.6" />
-      <text x="18" y="18" textAnchor="middle" fill="#e5e7eb" fontSize="7" fontFamily="Arial">{label}</text>
-    </svg>
-  );
 }
