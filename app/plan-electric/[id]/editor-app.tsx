@@ -26,7 +26,7 @@ import {
   metersPerPixelFromCalibration,
 } from "../../../lib/plan-electric/cable";
 import type { CableSettings, PlanPage, PlanProject, SymbolInstance, SymbolType } from "../../../lib/plan-electric/types";
-import { getSymbolDefinition, DEFAULT_SYMBOL_SCALE } from "../../../lib/plan-electric/symbols";
+import { getSymbolDefinition, DEFAULT_SYMBOL_SCALE, DEFAULT_LED_LENGTH_PX } from "../../../lib/plan-electric/symbols";
 import { supabase } from "../../../lib/supabase";
 
 const CanvasEditor = dynamic(
@@ -205,7 +205,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
       scale: DEFAULT_SYMBOL_SCALE,
       label: def.label,
       notes: "",
-      metadata: {},
+      metadata: type === "led" ? { ledLengthPx: DEFAULT_LED_LENGTH_PX } : {},
     };
     history.set((symbols) => [...symbols, instance]);
     setSelectedId(instance.id);
@@ -393,6 +393,13 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
               });
             }}
             onDropSymbol={(type, x, y) => placeSymbol(type, x, y)}
+            onLedLengthChange={(id, lengthPx, commit = true) => {
+              history.set((symbols) => symbols.map((symbol) => (
+                symbol.id === id
+                  ? { ...symbol, metadata: { ...symbol.metadata, ledLengthPx: lengthPx } }
+                  : symbol
+              )), commit);
+            }}
             onCalibrationClick={(x, y) => {
               setCalibrationPoints((points) => {
                 if (points.length >= 2) return [{ x, y }];
