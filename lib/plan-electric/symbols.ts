@@ -42,7 +42,7 @@ export const SYMBOL_LIBRARY: SymbolDefinition[] = [
   { type: "spot", category: "iluminat", label: "Spot / coborât", legend: "Spot", width: 14, height: 14 },
   { type: "aplica", category: "iluminat", label: "Aplică perete", legend: "Aplică", width: 16, height: 14 },
   { type: "pendul", category: "iluminat", label: "Pendul", legend: "Pendul", width: 14, height: 18 },
-  { type: "led", category: "iluminat", label: "Bandă LED", legend: "Bandă LED", width: 22, height: 10 },
+  { type: "led", category: "iluminat", label: "Bandă LED", legend: "Bandă LED (O/V)", width: 22, height: 10 },
   { type: "detector_fum", category: "diverse", label: "Detector de fum", legend: "Det. fum", width: 16, height: 16 },
   { type: "detector_gaz", category: "diverse", label: "Detector de gaz", legend: "Det. gaz", width: 16, height: 16 },
   { type: "tablou_electric", category: "diverse", label: "Tablou electric", legend: "Tablou TE", width: 20, height: 22 },
@@ -77,4 +77,10 @@ export function resolveLedLengthPx(metadata: Record<string, unknown> | undefined
 export function clampLedLengthPx(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_LED_LENGTH_PX;
   return Math.min(MAX_LED_LENGTH_PX, Math.max(MIN_LED_LENGTH_PX, Math.round(value)));
+}
+
+export type LedOrientation = "horizontal" | "vertical";
+
+export function resolveLedOrientation(metadata: Record<string, unknown> | undefined): LedOrientation {
+  return metadata?.ledOrientation === "vertical" ? "vertical" : "horizontal";
 }
