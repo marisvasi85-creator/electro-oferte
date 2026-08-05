@@ -205,7 +205,9 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
       scale: DEFAULT_SYMBOL_SCALE,
       label: def.label,
       notes: "",
-      metadata: type === "led" ? { ledLengthPx: DEFAULT_LED_LENGTH_PX } : {},
+      metadata: type === "led"
+        ? { ledLengthPx: DEFAULT_LED_LENGTH_PX, ledOrientation: "horizontal" }
+        : {},
     };
     history.set((symbols) => [...symbols, instance]);
     setSelectedId(instance.id);

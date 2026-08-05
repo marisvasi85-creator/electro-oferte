@@ -6,7 +6,7 @@ import {
   resolveMountingHeightM,
 } from "../../../lib/plan-electric/cable";
 import type { CableSettings } from "../../../lib/plan-electric/types";
-import { getSymbolDefinition } from "../../../lib/plan-electric/symbols";
+import { getSymbolDefinition, resolveLedOrientation } from "../../../lib/plan-electric/symbols";
 
 type InspectorProps = {
   symbol: SymbolInstance | null;
@@ -100,6 +100,25 @@ export function Inspector({ symbol, settings, onChange, onDelete, onDuplicate }:
       </label>
       {symbol.symbolType === "led" && (
         <label>
+          Orientare bandă LED
+          <select
+            value={resolveLedOrientation(symbol.metadata)}
+            onChange={(event) => {
+              onChange({
+                metadata: {
+                  ...symbol.metadata,
+                  ledOrientation: event.target.value === "vertical" ? "vertical" : "horizontal",
+                },
+              });
+            }}
+          >
+            <option value="horizontal">Orizontală</option>
+            <option value="vertical">Verticală</option>
+          </select>
+        </label>
+      )}
+      {symbol.symbolType === "led" && (
+        <label>
           Lungime bandă LED (px)
           <input
             type="number"
@@ -121,8 +140,8 @@ export function Inspector({ symbol, settings, onChange, onDelete, onDuplicate }:
       )}
       {symbol.symbolType === "led" && (
         <p className="pe-muted pe-cable-hint">
-        Selectează banda LED și trage capetele (cercurile) ca să o alungești sau scurtezi.
-      </p>
+          Alege orizontală/verticală, apoi trage capetele pentru lungime.
+        </p>
       )}
       <div className="pe-inspector-actions">
         <button type="button" onClick={onDuplicate}>Duplică</button>

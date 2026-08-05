@@ -7,7 +7,9 @@ import {
   clampLedLengthPx,
   getSymbolDefinition,
   resolveLedLengthPx,
+  resolveLedOrientation,
   SYMBOL_COLORS,
+  type LedOrientation,
 } from "../../../lib/plan-electric/symbols";
 
 const FILL = "#ffffff";
@@ -42,9 +44,15 @@ export function SymbolShape({
   const [resizingLed, setResizingLed] = useState(false);
   const def = getSymbolDefinition(type);
   const ledLength = resolveLedLengthPx(metadata);
-  const w = type === "led" ? ledLength : def.width;
-  const h = def.height;
-  const sw = Math.max(1, Math.min(type === "led" ? 14 : w, h) * 0.1);
+  const ledOrientation = resolveLedOrientation(metadata);
+  const ledThickness = 10;
+  const w = type === "led"
+    ? (ledOrientation === "vertical" ? ledThickness : ledLength)
+    : def.width;
+  const h = type === "led"
+    ? (ledOrientation === "vertical" ? ledLength : ledThickness)
+    : def.height;
+  const sw = Math.max(1, Math.min(type === "led" ? 14 : w, type === "led" ? 14 : h) * 0.1);
 
   return (
     <Group
@@ -74,7 +82,8 @@ export function SymbolShape({
       {type === "led" ? (
         <LedStrip
           length={ledLength}
-          height={h}
+          thickness={ledThickness}
+          orientation={ledOrientation}
           selected={selected}
           onLengthChange={onLedLengthChange}
           onResizeStart={() => setResizingLed(true)}
@@ -263,29 +272,32 @@ function renderGlyph(type: SymbolType, w: number, h: number, sw: number) {
 
 function LedStrip({
   length,
-  height,
+  thickness,
+  orientation,
   selected,
   onLengthChange,
   onResizeStart,
   onResizeEnd,
 }: {
   length: number;
-  height: number;
+  thickness: number;
+  orientation: LedOrientation;
   selected: boolean;
   onLengthChange?: (lengthPx: number, commit?: boolean) => void;
   onResizeStart?: () => void;
   onResizeEnd?: () => void;
 }) {
-  const cy = height / 2;
+  const vertical = orientation === "vertical";
   const half = length / 2;
+  const mid = thickness / 2;
   const bulbCount = Math.max(2, Math.floor(length / 28));
   const bulbs = Array.from({ length: bulbCount }, (_, index) => {
     const t = bulbCount === 1 ? 0.5 : index / (bulbCount - 1);
     return -half + t * length;
   });
 
-  function makeHandlers(side: "left" | "right") {
-    const sign = side === "right" ? 1 : -1;
+  function makeHandlers(side: "start" | "end") {
+    const sign = side === "end" ? 1 : -1;
     return {
       onMouseDown: (event: { cancelBubble: boolean; evt: Event }) => {
         event.cancelBubble = true;
@@ -304,63 +316,87 @@ function LedStrip({
       },
       onDragMove: (event: {
         cancelBubble: boolean;
-        target: { y: (value: number) => void; x: (value?: number) => number };
+        target: { y: (value?: number) => number; x: (value?: number) => number };
       }) => {
         event.cancelBubble = true;
         const node = event.target;
-        node.y(cy);
-        const next = clampLedLengthPx(Math.abs(node.x()) * 2);
-        node.x(sign * (next / 2));
-        onLengthChange?.(next, false);
+        if (vertical) {
+          node.x(mid);
+          const next = clampLedLengthPx(Math.abs(node.y()) * 2);
+          node.y(sign * (next / 2));
+          onLengthChange?.(next, false);
+        } else {
+          node.y(mid);
+          const next = clampLedLengthPx(Math.abs(node.x()) * 2);
+          node.x(sign * (next / 2));
+          onLengthChange?.(next, false);
+        }
       },
       onDragEnd: (event: {
         cancelBubble: boolean;
         target: {
-          y: (value: number) => void;
+          y: (value?: number) => number;
           x: (value?: number) => number;
           getParent: () => { draggable: (value: boolean) => void } | null;
         };
       }) => {
         event.cancelBubble = true;
         const node = event.target;
-        node.y(cy);
-        const next = clampLedLengthPx(Math.abs(node.x()) * 2);
-        node.x(sign * (next / 2));
-        onLengthChange?.(next, true);
+        if (vertical) {
+          node.x(mid);
+          const next = clampLedLengthPx(Math.abs(node.y()) * 2);
+          node.y(sign * (next / 2));
+          onLengthChange?.(next, true);
+        } else {
+          node.y(mid);
+          const next = clampLedLengthPx(Math.abs(node.x()) * 2);
+          node.x(sign * (next / 2));
+          onLengthChange?.(next, true);
+        }
         node.getParent()?.draggable(true);
         onResizeEnd?.();
       },
     };
   }
 
+  const linePoints = vertical
+    ? [mid, -half, mid, half]
+    : [-half, mid, half, mid];
+
   return (
     <>
       {selected && (
         <Rect
-          x={-half - 4}
-          y={cy - 10}
-          width={length + 8}
-          height={20}
+          x={vertical ? mid - 10 : -half - 4}
+          y={vertical ? -half - 4 : mid - 10}
+          width={vertical ? 20 : length + 8}
+          height={vertical ? length + 8 : 20}
           stroke="#38bdf8"
           strokeWidth={1}
           dash={[3, 2]}
           listening={false}
         />
       )}
-      <Rect x={-half} y={cy - 8} width={length} height={16} fill="rgba(0,0,0,0.01)" />
+      <Rect
+        x={vertical ? mid - 8 : -half}
+        y={vertical ? -half : mid - 8}
+        width={vertical ? 16 : length}
+        height={vertical ? length : 16}
+        fill="rgba(0,0,0,0.01)"
+      />
       <Line
-        points={[-half, cy, half, cy]}
+        points={linePoints}
         stroke={SYMBOL_COLORS.led}
         strokeWidth={2.5}
         dash={[7, 5]}
         lineCap="round"
         listening={false}
       />
-      {bulbs.map((bx, index) => (
+      {bulbs.map((pos, index) => (
         <Circle
           key={`bulb-${index}`}
-          x={bx}
-          y={cy}
+          x={vertical ? mid : pos}
+          y={vertical ? pos : mid}
           radius={3.2}
           fill={SYMBOL_COLORS.ledBulb}
           stroke={SYMBOL_COLORS.led}
@@ -371,26 +407,26 @@ function LedStrip({
       {onLengthChange && (
         <>
           <Circle
-            x={half}
-            y={cy}
+            x={vertical ? mid : half}
+            y={vertical ? half : mid}
             radius={selected ? 7 : 4.5}
             fill={selected ? "#38bdf8" : SYMBOL_COLORS.led}
             stroke="#fff"
             strokeWidth={1.5}
             draggable
             hitStrokeWidth={18}
-            {...makeHandlers("right")}
+            {...makeHandlers("end")}
           />
           <Circle
-            x={-half}
-            y={cy}
+            x={vertical ? mid : -half}
+            y={vertical ? -half : mid}
             radius={selected ? 7 : 4.5}
             fill={selected ? "#38bdf8" : SYMBOL_COLORS.led}
             stroke="#fff"
             strokeWidth={1.5}
             draggable
             hitStrokeWidth={18}
-            {...makeHandlers("left")}
+            {...makeHandlers("start")}
           />
         </>
       )}
