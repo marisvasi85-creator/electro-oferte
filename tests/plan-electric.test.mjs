@@ -75,6 +75,7 @@ test("ships calculation engine surfaces", async () => {
   assert.match(exportModule, /exportMaterialsPdf/);
   assert.match(exportModule, /appendMaterialsPdfPages|billOfMaterials/);
   assert.match(exportModule, /rasterizeSymbolPng/);
+  assert.match(exportModule, /captureFullPlanDataUrl/);
   assert.match(exportModule, /appendLegendPdfPage/);
   assert.match(exportModule, /Legendă simboluri/);
   assert.match(symbolSvg, /getSymbolSvgMarkup/);
