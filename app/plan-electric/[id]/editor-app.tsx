@@ -21,9 +21,10 @@ import {
 import { importPlanFile } from "../../../lib/plan-electric/import-plan";
 import { exportPlanImage, exportPlanPdf } from "../../../lib/plan-electric/export";
 import {
-  estimateCable,
+  calculateProject,
   mergeCableSettings,
   metersPerPixelFromCalibration,
+  toCableEstimate,
 } from "../../../lib/plan-electric/cable";
 import type { CableSettings, PlanPage, PlanProject, SymbolInstance, SymbolType } from "../../../lib/plan-electric/types";
 import { getSymbolDefinition, DEFAULT_SYMBOL_SCALE, DEFAULT_LED_LENGTH_PX } from "../../../lib/plan-electric/symbols";
@@ -150,9 +151,13 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
     [history.present, selectedId],
   );
 
-  const cableEstimate = useMemo(
-    () => estimateCable(history.present, settings),
+  const calculation = useMemo(
+    () => calculateProject(history.present, settings),
     [history.present, settings],
+  );
+  const cableEstimate = useMemo(
+    () => toCableEstimate(calculation, history.present),
+    [calculation, history.present],
   );
 
   const calibrationPixels = useMemo(() => {
@@ -373,6 +378,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
             calibrating={calibrating}
             calibrationPoints={calibrationPoints}
             cableRuns={cableEstimate.runs}
+            routeSegments={cableEstimate.routeSegments}
             showCableGuides={showCableGuides && cableEstimate.calibrated && !cableEstimate.missingPanel}
             guides={guides}
             stageRef={stageRef}
@@ -414,7 +420,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
         <aside className="pe-inspector">
           <CablePanel
             settings={settings}
-            estimate={cableEstimate}
+            calculation={calculation}
             calibrating={calibrating}
             calibrationPixels={calibrationPixels}
             onChangeSettings={patchSettings}

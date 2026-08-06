@@ -23,6 +23,7 @@ type CanvasEditorProps = {
   calibrating: boolean;
   calibrationPoints: { x: number; y: number }[];
   cableRuns: CableRun[];
+  routeSegments?: Array<{ fromId: string; toId: string }>;
   showCableGuides: boolean;
   guides: { vertical: number[]; horizontal: number[] };
   onSelect: (id: string | null) => void;
@@ -51,6 +52,7 @@ export function CanvasEditor({
   calibrating,
   calibrationPoints,
   cableRuns,
+  routeSegments = [],
   showCableGuides,
   guides,
   onSelect,
@@ -223,22 +225,39 @@ export function CanvasEditor({
           {background && (
             <KonvaImage image={background} x={0} y={0} width={width} height={height} listening={false} />
           )}
-          {showCableGuides && cableRuns.map((run) => {
-            const panel = symbolById.get(run.panelId);
-            const device = symbolById.get(run.deviceId);
-            if (!panel || !device) return null;
-            return (
-              <Line
-                key={`cable-${run.deviceId}`}
-                points={[panel.x, panel.y, device.x, panel.y, device.x, device.y]}
-                stroke="#0284c7"
-                strokeWidth={1.5}
-                dash={[8, 6]}
-                opacity={0.55}
-                listening={false}
-              />
-            );
-          })}
+          {showCableGuides && (routeSegments.length
+            ? routeSegments.map((segment, index) => {
+              const from = symbolById.get(segment.fromId);
+              const to = symbolById.get(segment.toId);
+              if (!from || !to) return null;
+              return (
+                <Line
+                  key={`cable-seg-${segment.fromId}-${segment.toId}-${index}`}
+                  points={[from.x, from.y, to.x, from.y, to.x, to.y]}
+                  stroke="#0284c7"
+                  strokeWidth={1.5}
+                  dash={[8, 6]}
+                  opacity={0.55}
+                  listening={false}
+                />
+              );
+            })
+            : cableRuns.map((run) => {
+              const panel = symbolById.get(run.panelId);
+              const device = symbolById.get(run.deviceId);
+              if (!panel || !device) return null;
+              return (
+                <Line
+                  key={`cable-${run.deviceId}`}
+                  points={[panel.x, panel.y, device.x, panel.y, device.x, device.y]}
+                  stroke="#0284c7"
+                  strokeWidth={1.5}
+                  dash={[8, 6]}
+                  opacity={0.55}
+                  listening={false}
+                />
+              );
+            }))}
           {symbols.map((symbol) => (
             <SymbolShape
               key={symbol.id}

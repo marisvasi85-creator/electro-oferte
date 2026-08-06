@@ -28,21 +28,27 @@ test("ships Plan Electric module surfaces", async () => {
   assert.match(home, /\/plan-electric/);
 });
 
-test("ships cable calculation surfaces", async () => {
-  const [cable, editor, panel, migration] = await Promise.all([
+test("ships calculation engine surfaces", async () => {
+  const [cable, engine, catalog, editor, panel, migration] = await Promise.all([
     readFile(new URL("../lib/plan-electric/cable.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/plan-electric/calculation/engine.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/plan-electric/catalog/defaults.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/plan-electric/[id]/editor-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/plan-electric/components/CablePanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260804_plan_electric_cable_settings.sql", import.meta.url), "utf8"),
   ]);
 
+  assert.match(cable, /calculateProject/);
   assert.match(cable, /estimateCable/);
-  assert.match(cable, /floor_orthogonal/);
-  assert.match(cable, /outletHeightM/);
-  assert.match(cable, /switchHeightM/);
+  assert.match(cable, /routingMode/);
+  assert.match(engine, /registerCalculationRule/);
+  assert.match(engine, /runCalculationEngine/);
+  assert.match(catalog, /cable\.n2xh\.3x1\.5/);
+  assert.match(catalog, /cable\.n2xh\.3x2\.5/);
+  assert.match(catalog, /deviceBoxes/);
   assert.match(editor, /CablePanel/);
-  assert.match(editor, /estimateCable/);
-  assert.match(panel, /Cablu pardoseală/);
+  assert.match(editor, /calculateProject/);
+  assert.match(panel, /Calculation Engine|Deviz materiale/);
   assert.match(migration, /settings jsonb/);
 });
 

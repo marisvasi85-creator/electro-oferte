@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import type { CableEstimate, CableSettings } from "../../../lib/plan-electric/types";
 import { formatMeters } from "../../../lib/plan-electric/cable";
+import type { CalculationResult } from "../../../lib/plan-electric/calculation";
+import type { CableSettings } from "../../../lib/plan-electric/types";
 
 type CablePanelProps = {
   settings: CableSettings;
-  estimate: CableEstimate;
+  calculation: CalculationResult;
   calibrating: boolean;
   calibrationPixels: number | null;
   onChangeSettings: (patch: Partial<CableSettings>) => void;
@@ -17,7 +18,7 @@ type CablePanelProps = {
 
 export function CablePanel({
   settings,
-  estimate,
+  calculation,
   calibrating,
   calibrationPixels,
   onChangeSettings,
@@ -29,37 +30,108 @@ export function CablePanel({
     String(settings.calibrationRealDistanceM ?? 1),
   );
 
+  const cable15 = calculation.cables.find((item) => item.technicalKey.includes("3x1.5") || item.technicalKey.includes("3x1,5"));
+  const cable25 = calculation.cables.find((item) => item.technicalKey.includes("3x2.5") || item.technicalKey.includes("3x2,5"));
+  const otherCables = calculation.cables.filter(
+    (item) => item !== cable15 && item !== cable25,
+  );
+  const framesTotal = calculation.frames.reduce((sum, item) => sum + item.quantity, 0);
+  const accessoriesTotal = calculation.accessories.reduce((sum, item) => sum + item.quantity, 0);
+
   return (
     <section className="pe-cable-panel">
       <div className="pe-panel-title">
-        <span>Cablu pardoseală</span>
-        <small>Calcul live pe măsură ce plasezi simboluri</small>
+        <span>Calculation Engine</span>
+        <small>Materiale calculate din catalog + trasee logice</small>
       </div>
 
       <div className="pe-cable-totals">
         <div>
-          <strong>{formatMeters(estimate.withReserveM)}</strong>
-          <span>total cu rezervă {settings.reservePercent}%</span>
+          <strong>{formatMeters(calculation.totals.cableWithReserveM)}</strong>
+          <span>cablu total + rezervă {calculation.reservePercent}%</span>
         </div>
         <div>
-          <strong>{formatMeters(estimate.rawTotalM)}</strong>
-          <span>brut ({estimate.deviceCount} aparate)</span>
+          <strong>{formatMeters(calculation.totals.cableRawM)}</strong>
+          <span>brut · {calculation.counts.devicesTotal} aparate</span>
         </div>
       </div>
 
-      {!estimate.calibrated && (
+      {!calculation.calibrated && (
         <p className="pe-cable-warn">Calibrează scara planului pentru metri reali.</p>
       )}
-      {estimate.calibrated && estimate.missingPanel && (
+      {calculation.calibrated && calculation.missingPanel && (
         <p className="pe-cable-warn">Plasează un tablou electric pe plan.</p>
       )}
+      {calculation.diagnostics.map((message) => (
+        <p key={message} className="pe-cable-warn">{message}</p>
+      ))}
 
-      <div className="pe-cable-breakdown">
-        <div><span>Prize</span><strong>{formatMeters(estimate.byCategory.prize)}</strong></div>
-        <div><span>Întrerupătoare</span><strong>{formatMeters(estimate.byCategory.intrerupatoare)}</strong></div>
-        <div><span>Iluminat</span><strong>{formatMeters(estimate.byCategory.iluminat)}</strong></div>
-        <div><span>Diverse</span><strong>{formatMeters(estimate.byCategory.diverse)}</strong></div>
+      <div className="pe-panel-title pe-panel-title-tight">
+        <span>Cabluri</span>
       </div>
+      <div className="pe-cable-breakdown">
+        <div>
+          <span>3x1,5 mm²</span>
+          <strong>{formatMeters(cable15?.lengthWithReserveM ?? 0)}</strong>
+        </div>
+        <div>
+          <span>3x2,5 mm²</span>
+          <strong>{formatMeters(cable25?.lengthWithReserveM ?? 0)}</strong>
+        </div>
+        {otherCables.map((cable) => (
+          <div key={cable.technicalKey}>
+            <span>{cable.label}</span>
+            <strong>{formatMeters(cable.lengthWithReserveM)}</strong>
+          </div>
+        ))}
+      </div>
+
+      <div className="pe-panel-title pe-panel-title-tight">
+        <span>Aparate & doze</span>
+      </div>
+      <div className="pe-cable-breakdown">
+        <div><span>Prize</span><strong>{calculation.counts.sockets}</strong></div>
+        <div><span>Întrerupătoare</span><strong>{calculation.counts.switches}</strong></div>
+        <div><span>Corpuri iluminat</span><strong>{calculation.counts.lights}</strong></div>
+        <div><span>Doze aparat</span><strong>{calculation.deviceBoxes}</strong></div>
+        <div><span>Rame</span><strong>{framesTotal}</strong></div>
+        <div><span>Accesorii</span><strong>{accessoriesTotal}</strong></div>
+      </div>
+
+      {calculation.circuits.length > 0 && (
+        <>
+          <div className="pe-panel-title pe-panel-title-tight">
+            <span>Circuite</span>
+          </div>
+          <div className="pe-cable-breakdown">
+            {calculation.circuits.map((circuit) => (
+              <div key={circuit.name}>
+                <span>{circuit.name} · {circuit.deviceCount} aparate</span>
+                <strong>{formatMeters(circuit.lengthWithReserveM)}</strong>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {calculation.billOfMaterials.length > 0 && (
+        <>
+          <div className="pe-panel-title pe-panel-title-tight">
+            <span>Deviz materiale</span>
+          </div>
+          <div className="pe-bom-list">
+            {calculation.billOfMaterials.map((line) => (
+              <div key={`${line.group}-${line.technicalKey}`} className="pe-bom-row">
+                <span className="pe-bom-group">{labelForGroup(line.group)}</span>
+                <span className="pe-bom-desc">{line.description}</span>
+                <strong>
+                  {line.unit === "m" ? formatMeters(line.quantity) : `${roundQty(line.quantity)} ${line.unit}`}
+                </strong>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="pe-panel-title pe-panel-title-tight">
         <span>Scară</span>
@@ -105,10 +177,10 @@ export function CablePanel({
       )}
 
       <div className="pe-panel-title pe-panel-title-tight">
-        <span>Înălțimi montaj (m)</span>
+        <span>Configurație calcul</span>
       </div>
       <label>
-        Prize
+        Prize (m)
         <input
           type="number"
           min={0}
@@ -119,7 +191,7 @@ export function CablePanel({
         />
       </label>
       <label>
-        Întrerupătoare
+        Întrerupătoare (m)
         <input
           type="number"
           min={0}
@@ -130,7 +202,7 @@ export function CablePanel({
         />
       </label>
       <label>
-        Tablou
+        Tablou (m)
         <input
           type="number"
           min={0}
@@ -141,7 +213,7 @@ export function CablePanel({
         />
       </label>
       <label>
-        Iluminat / tavan
+        Iluminat / tavan (m)
         <input
           type="number"
           min={0}
@@ -152,7 +224,7 @@ export function CablePanel({
         />
       </label>
       <label>
-        Detectoare
+        Detectoare (m)
         <input
           type="number"
           min={0}
@@ -174,7 +246,7 @@ export function CablePanel({
         />
       </label>
       <label>
-        Model traseu
+        Geometrie pardoseală
         <select
           value={settings.routing}
           onChange={(event) =>
@@ -187,9 +259,36 @@ export function CablePanel({
           <option value="floor_euclidean">Linie dreaptă</option>
         </select>
       </label>
+      <label>
+        Topologie trasee
+        <select
+          value={settings.routingMode}
+          onChange={(event) =>
+            onChangeSettings({
+              routingMode: event.target.value === "home_run" ? "home_run" : "circuit_tree",
+            })
+          }
+        >
+          <option value="circuit_tree">Arbore pe circuit (realist)</option>
+          <option value="home_run">Home-run din tablou</option>
+        </select>
+      </label>
       <p className="pe-muted pe-cable-hint">
-        Formulă: coborâre tablou + traseu pe pardoseală + urcare la aparat.
+        Motor modular: cabluri, doze aparat, rame și accesorii din metadatele catalogului. Extensibil pentru I7, cădere tensiune, siguranțe, manoperă.
       </p>
     </section>
   );
+}
+
+function labelForGroup(group: string): string {
+  if (group === "cable") return "Cablu";
+  if (group === "device") return "Aparat";
+  if (group === "box") return "Doză";
+  if (group === "frame") return "Ramă";
+  return "Acc.";
+}
+
+function roundQty(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2);
 }
