@@ -269,7 +269,12 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
     try {
       const fileName = (project.name || "plan-electric").replace(/\s+/g, "-").toLowerCase();
       if (format === "png" || format === "jpeg") {
-        await exportPlanImage({ stage: stageRef.current, format, fileName });
+        await exportPlanImage({
+          stage: stageRef.current,
+          page,
+          format,
+          fileName,
+        });
       } else {
         await exportPlanPdf({
           stage: stageRef.current,

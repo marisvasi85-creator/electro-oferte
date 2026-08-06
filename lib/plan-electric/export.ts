@@ -59,11 +59,86 @@ function slugFileName(value: string) {
   return (value || "plan-electric").replace(/\s+/g, "-").toLowerCase();
 }
 
+type ExportStage = {
+  width: () => number;
+  height: () => number;
+  scaleX: () => number;
+  scaleY: () => number;
+  x: () => number;
+  y: () => number;
+  size: (size: { width: number; height: number }) => unknown;
+  scale: (scale: { x: number; y: number }) => unknown;
+  position: (position: { x: number; y: number }) => unknown;
+  batchDraw?: () => void;
+  draw?: () => void;
+  toDataURL: (config?: Record<string, unknown>) => string;
+};
+
+function redrawStage(stage: ExportStage) {
+  if (stage.batchDraw) stage.batchDraw();
+  else stage.draw?.();
+}
+
+/**
+ * Capture the full plan page (not the current zoomed/panned viewport).
+ * Temporarily resets stage transform, then restores the editor view.
+ */
+export async function captureFullPlanDataUrl(
+  stage: ExportStage,
+  planWidth: number,
+  planHeight: number,
+  options: {
+    pixelRatio?: number;
+    mimeType?: string;
+    quality?: number;
+  } = {},
+): Promise<string> {
+  const width = Math.max(1, Math.round(planWidth));
+  const height = Math.max(1, Math.round(planHeight));
+  const maxSide = Math.max(width, height);
+  const autoRatio = maxSide > 4500 ? 1.25 : maxSide > 3000 ? 1.75 : maxSide > 2000 ? 2 : 2.5;
+  const pixelRatio = options.pixelRatio ?? autoRatio;
+  const previous = {
+    width: stage.width(),
+    height: stage.height(),
+    scaleX: stage.scaleX(),
+    scaleY: stage.scaleY(),
+    x: stage.x(),
+    y: stage.y(),
+  };
+
+  try {
+    stage.size({ width, height });
+    stage.scale({ x: 1, y: 1 });
+    stage.position({ x: 0, y: 0 });
+    redrawStage(stage);
+    return stage.toDataURL({
+      pixelRatio,
+      mimeType: options.mimeType ?? "image/png",
+      quality: options.quality,
+      x: 0,
+      y: 0,
+      width,
+      height,
+    });
+  } finally {
+    stage.size({ width: previous.width, height: previous.height });
+    stage.scale({ x: previous.scaleX, y: previous.scaleY });
+    stage.position({ x: previous.x, y: previous.y });
+    redrawStage(stage);
+  }
+}
+
 export async function exportStageAsDataUrl(
-  stage: { toDataURL: (config?: Record<string, unknown>) => string },
+  stage: ExportStage,
+  planWidth: number,
+  planHeight: number,
   pixelRatio = 2,
 ) {
-  return stage.toDataURL({ pixelRatio, mimeType: "image/png" });
+  return captureFullPlanDataUrl(stage, planWidth, planHeight, {
+    pixelRatio,
+    mimeType: "image/png",
+  });
 }
 
 export async function downloadDataUrl(dataUrl: string, fileName: string) {
@@ -83,17 +158,21 @@ function downloadBlob(blob: Blob, fileName: string) {
 }
 
 export async function exportPlanImage(input: {
-  stage: { toDataURL: (config?: Record<string, unknown>) => string };
+  stage: ExportStage;
+  page: Pick<PlanPage, "width" | "height">;
   format: "png" | "jpeg";
   fileName: string;
 }) {
   const mimeType = input.format === "png" ? "image/png" : "image/jpeg";
-  const dataUrl = input.stage.toDataURL({ pixelRatio: 2.5, mimeType, quality: 0.95 });
+  const dataUrl = await captureFullPlanDataUrl(input.stage, input.page.width, input.page.height, {
+    mimeType,
+    quality: 0.95,
+  });
   await downloadDataUrl(dataUrl, `${input.fileName}.${input.format === "png" ? "png" : "jpg"}`);
 }
 
 export async function exportPlanPdf(input: {
-  stage: { toDataURL: (config?: Record<string, unknown>) => string };
+  stage: ExportStage;
   project: PlanProject;
   page: PlanPage;
   symbols: SymbolInstance[];
@@ -102,7 +181,11 @@ export async function exportPlanPdf(input: {
   /** When provided, a materials BOM page is appended. */
   calculation?: CalculationResult | null;
 }) {
-  const dataUrl = input.stage.toDataURL({ pixelRatio: 2.5, mimeType: "image/jpeg", quality: 0.92 });
+  const dataUrl = await captureFullPlanDataUrl(input.stage, input.page.width, input.page.height, {
+    pixelRatio: 2.5,
+    mimeType: "image/jpeg",
+    quality: 0.92,
+  });
   const orientation = input.page.width >= input.page.height ? "landscape" : "portrait";
   const pdf = new jsPDF({
     orientation,
@@ -113,8 +196,8 @@ export async function exportPlanPdf(input: {
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 8;
   const header = 16;
-  // Small footer only — legend moves to its own page so it never covers the plan.
-  const footer = 8;
+  // Tiny footer — legend is on a separate page; keep almost all space for the plan.
+  const footer = 4;
   const legend = usedLegend(input.symbols);
 
   pdf.setFont("helvetica", "bold");
@@ -131,7 +214,8 @@ export async function exportPlanPdf(input: {
   const drawW = input.page.width * ratio;
   const drawH = input.page.height * ratio;
   const x = margin + (maxW - drawW) / 2;
-  const y = header + 2;
+  // Vertically center the full plan in the available area when letterboxed.
+  const y = header + Math.max(0, (maxH - drawH) / 2);
   pdf.addImage(dataUrl, "JPEG", x, y, drawW, drawH);
 
   if (legend.length > 0) {

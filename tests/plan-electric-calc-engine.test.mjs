@@ -7,7 +7,7 @@ import {
 } from "../lib/plan-electric/cable";
 import { DEFAULT_MATERIAL_CATALOG } from "../lib/plan-electric/catalog";
 import { registerCalculationRule, runCalculationEngine } from "../lib/plan-electric/calculation";
-import { buildMaterialsCsv } from "../lib/plan-electric/export";
+import { buildMaterialsCsv, captureFullPlanDataUrl } from "../lib/plan-electric/export";
 
 function sym(partial) {
   return {
@@ -137,6 +137,45 @@ test("registerCalculationRule extends engine without changing core rules", () =>
     config: calibrated,
   });
   assert.ok(result.diagnostics.includes("I7 stub rule active"));
+});
+
+test("full plan capture resets stage transform then restores it", async () => {
+  const calls = [];
+  const stage = {
+    width: () => 800,
+    height: () => 600,
+    scaleX: () => 0.35,
+    scaleY: () => 0.35,
+    x: () => 40,
+    y: () => 20,
+    size(next) { calls.push(["size", next]); },
+    scale(next) { calls.push(["scale", next]); },
+    position(next) { calls.push(["position", next]); },
+    batchDraw() { calls.push(["draw"]); },
+    toDataURL(config) {
+      calls.push(["toDataURL", config]);
+      return "data:image/jpeg;base64,FULLPLAN";
+    },
+  };
+
+  const dataUrl = await captureFullPlanDataUrl(stage, 2000, 1400, {
+    mimeType: "image/jpeg",
+    quality: 0.9,
+  });
+
+  assert.equal(dataUrl, "data:image/jpeg;base64,FULLPLAN");
+  assert.deepEqual(calls[0], ["size", { width: 2000, height: 1400 }]);
+  assert.deepEqual(calls[1], ["scale", { x: 1, y: 1 }]);
+  assert.deepEqual(calls[2], ["position", { x: 0, y: 0 }]);
+  const exportCall = calls.find((entry) => entry[0] === "toDataURL");
+  assert.ok(exportCall);
+  assert.equal(exportCall[1].width, 2000);
+  assert.equal(exportCall[1].height, 1400);
+  // Restored editor viewport after capture
+  assert.deepEqual(calls.at(-4), ["size", { width: 800, height: 600 }]);
+  assert.deepEqual(calls.at(-3), ["scale", { x: 0.35, y: 0.35 }]);
+  assert.deepEqual(calls.at(-2), ["position", { x: 40, y: 20 }]);
+  assert.deepEqual(calls.at(-1), ["draw"]);
 });
 
 test("materials CSV export includes BOM lines and summary", () => {
