@@ -66,8 +66,9 @@ test("ships calculation engine surfaces", async () => {
   assert.match(exportModule, /buildMaterialsCsv/);
   assert.match(exportModule, /exportMaterialsPdf/);
   assert.match(exportModule, /appendMaterialsPdfPages|billOfMaterials/);
-  assert.match(exportModule, /drawColoredLegend|rasterizeSymbolPng/);
-  assert.match(exportModule, /gapPlanLegend|planBottom/);
+  assert.match(exportModule, /rasterizeSymbolPng/);
+  assert.match(exportModule, /appendLegendPdfPage/);
+  assert.match(exportModule, /Legendă simboluri/);
   assert.match(symbolSvg, /getSymbolSvgMarkup/);
   assert.match(symbolSvg, /xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
   assert.match(symbolSvg, /SYMBOL_COLORS/);

@@ -103,8 +103,9 @@ export async function exportPlanPdf(input: {
   calculation?: CalculationResult | null;
 }) {
   const dataUrl = input.stage.toDataURL({ pixelRatio: 2.5, mimeType: "image/jpeg", quality: 0.92 });
+  const orientation = input.page.width >= input.page.height ? "landscape" : "portrait";
   const pdf = new jsPDF({
-    orientation: input.page.width >= input.page.height ? "landscape" : "portrait",
+    orientation,
     unit: "mm",
     format: input.size,
   });
@@ -112,16 +113,9 @@ export async function exportPlanPdf(input: {
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 8;
   const header = 16;
+  // Small footer only — legend moves to its own page so it never covers the plan.
+  const footer = 8;
   const legend = usedLegend(input.symbols);
-  const cols = pageWidth >= 350 ? 5 : 4;
-  const rowH = 6.8;
-  const gapPlanLegend = 6;
-  const legendTitleH = 5;
-  const bottomMargin = 6;
-  const legendRows = legend.length ? Math.ceil(legend.length / cols) : 0;
-  const legendBlockH = legend.length ? legendTitleH + legendRows * rowH : 0;
-  // Reserve full legend height under the plan so icons never overlap the drawing.
-  const footer = legendBlockH + gapPlanLegend + bottomMargin;
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
@@ -140,26 +134,16 @@ export async function exportPlanPdf(input: {
   const y = header + 2;
   pdf.addImage(dataUrl, "JPEG", x, y, drawW, drawH);
 
-  const planBottom = y + drawH;
-  const legendTop = planBottom + gapPlanLegend;
-
-  // Clear strip + separator so the plan edge never reads as covered by the legend.
-  pdf.setFillColor(255, 255, 255);
-  pdf.rect(0, planBottom + 1, pageWidth, pageHeight - planBottom - 1, "F");
-  pdf.setDrawColor(180);
-  pdf.setLineWidth(0.3);
-  pdf.line(margin, planBottom + gapPlanLegend * 0.45, pageWidth - margin, planBottom + gapPlanLegend * 0.45);
-
-  const icons = await buildLegendIconMap(legend.map((item) => item.type));
-  drawColoredLegend(pdf, {
-    items: legend,
-    icons,
-    margin,
-    pageWidth,
-    top: legendTop,
-    cols,
-    rowH,
-  });
+  if (legend.length > 0) {
+    const icons = await buildLegendIconMap(legend.map((item) => item.type));
+    appendLegendPdfPage(pdf, {
+      project: input.project,
+      items: legend,
+      icons,
+      format: input.size,
+      orientation,
+    });
+  }
 
   if (input.calculation && input.calculation.billOfMaterials.length > 0) {
     appendMaterialsPdfPages(pdf, {
@@ -171,49 +155,77 @@ export async function exportPlanPdf(input: {
   pdf.save(`${input.fileName}-${input.size}.pdf`);
 }
 
-function drawColoredLegend(
+function appendLegendPdfPage(
   pdf: jsPDF,
   input: {
+    project: PlanProject;
     items: Array<{ type: SymbolType; legend: string }>;
     icons: Map<SymbolType, string>;
-    margin: number;
-    pageWidth: number;
-    top: number;
-    cols: number;
-    rowH: number;
+    format: "a3" | "a4";
+    orientation: "landscape" | "portrait";
   },
 ) {
-  const { items, icons, margin, pageWidth, top, cols, rowH } = input;
-  const usable = pageWidth - margin * 2;
-  const colW = usable / cols;
-  const iconBox = 6.2;
+  const margin = 14;
+  const rowH = 14;
+  const iconBox = 10;
+  let continuation = false;
+  let pageWidth = 0;
+  let pageHeight = 0;
+  let cols = 2;
+  let contentTop = 0;
+  let rowsPerPage = 1;
+  let writtenOnPage = 0;
 
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(9);
-  pdf.setTextColor(30);
-  pdf.text("Legendă", margin, top);
+  const openPage = () => {
+    pdf.addPage(input.format, input.orientation);
+    pageWidth = pdf.internal.pageSize.getWidth();
+    pageHeight = pdf.internal.pageSize.getHeight();
+    cols = pageWidth >= 350 ? 3 : 2;
+    contentTop = continuation ? margin + 12 : margin + 24;
+    rowsPerPage = Math.max(1, Math.floor((pageHeight - contentTop - margin) / rowH));
+    writtenOnPage = 0;
 
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(8);
-  pdf.setTextColor(40);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(14);
+    pdf.setTextColor(20);
+    pdf.text(continuation ? "Legendă simboluri (continuare)" : "Legendă simboluri", margin, margin + 2);
+    if (!continuation) {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(10);
+      pdf.text(input.project.name || "Plan electric", margin, margin + 9);
+      pdf.text("Simbolurile de mai jos corespund celor de pe plan.", margin, margin + 15);
+    }
+  };
 
-  items.forEach((item, index) => {
-    const col = index % cols;
-    const row = Math.floor(index / cols);
-    const lx = margin + col * colW;
-    const ly = top + 3 + row * rowH;
-    const icon = icons.get(item.type);
+  openPage();
+
+  for (const item of input.items) {
+    if (writtenOnPage >= cols * rowsPerPage) {
+      continuation = true;
+      openPage();
+    }
+
+    const localCol = writtenOnPage % cols;
+    const localRow = Math.floor(writtenOnPage / cols);
+    const lx = margin + localCol * ((pageWidth - margin * 2) / cols);
+    const ly = contentTop + localRow * rowH;
+    const icon = input.icons.get(item.type);
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(11);
+    pdf.setTextColor(30);
     if (icon) {
       const size = getSymbolSvgSize(item.type);
       const aspect = size.width / Math.max(1, size.height);
       const drawH = iconBox;
-      const drawW = Math.min(colW * 0.28, iconBox * aspect);
+      const drawW = Math.min(22, iconBox * aspect);
       pdf.addImage(icon, "PNG", lx, ly, drawW, drawH);
-      pdf.text(item.legend, lx + drawW + 1.6, ly + drawH * 0.72);
+      pdf.text(item.legend, lx + drawW + 3, ly + drawH * 0.7);
     } else {
-      pdf.text(item.legend, lx, ly + 4.5);
+      pdf.text(item.legend, lx, ly + 7);
     }
-  });
+    writtenOnPage += 1;
+  }
 
   pdf.setTextColor(0);
 }
