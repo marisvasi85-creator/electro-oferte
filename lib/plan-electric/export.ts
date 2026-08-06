@@ -1,17 +1,58 @@
 import { jsPDF } from "jspdf";
 import type { CalculationResult } from "./calculation";
-import type { PlanPage, PlanProject, SymbolInstance } from "./types";
+import type { PlanPage, PlanProject, SymbolInstance, SymbolType } from "./types";
 import { getSymbolDefinition } from "./symbols";
+import { getSymbolSvgMarkup, getSymbolSvgSize } from "./symbol-svg";
 
 function usedLegend(symbols: SymbolInstance[]) {
   const seen = new Set<string>();
-  const items: Array<{ legend: string; type: string }> = [];
+  const items: Array<{ legend: string; type: SymbolType }> = [];
   for (const symbol of symbols) {
     if (seen.has(symbol.symbolType)) continue;
     seen.add(symbol.symbolType);
     items.push({ type: symbol.symbolType, legend: getSymbolDefinition(symbol.symbolType).legend });
   }
   return items;
+}
+
+function loadHtmlImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Nu s-a putut încărca simbolul pentru legendă."));
+    image.src = src;
+  });
+}
+
+/** Rasterize catalog SVG glyph to PNG data URL for jsPDF. */
+export async function rasterizeSymbolPng(type: SymbolType, scale = 4): Promise<string> {
+  const { width, height } = getSymbolSvgSize(type);
+  const markup = getSymbolSvgMarkup(type).replace(
+    "<svg ",
+    `<svg width="${width * scale}" height="${height * scale}" `,
+  );
+  const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const image = await loadHtmlImage(url);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas indisponibil pentru legendă.");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/png");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function buildLegendIconMap(types: SymbolType[]): Promise<Map<SymbolType, string>> {
+  const entries = await Promise.all(
+    types.map(async (type) => [type, await rasterizeSymbolPng(type)] as const),
+  );
+  return new Map(entries);
 }
 
 function slugFileName(value: string) {
@@ -71,7 +112,13 @@ export async function exportPlanPdf(input: {
   const pageHeight = pdf.internal.pageSize.getHeight();
   const margin = 8;
   const header = 16;
-  const footer = 28;
+  const legend = usedLegend(input.symbols);
+  const cols = pageWidth >= 350 ? 5 : 4;
+  const rowH = 7.2;
+  const legendBlockH = legend.length
+    ? 7 + Math.ceil(legend.length / cols) * rowH
+    : 10;
+  const footer = Math.min(pageHeight * 0.42, Math.max(22, legendBlockH + 4));
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
@@ -90,18 +137,15 @@ export async function exportPlanPdf(input: {
   const y = header + 2;
   pdf.addImage(dataUrl, "JPEG", x, y, drawW, drawH);
 
-  const legend = usedLegend(input.symbols);
-  pdf.setFontSize(8);
-  pdf.text("Legendă", margin, pageHeight - footer + 6);
-  let lx = margin;
-  let ly = pageHeight - footer + 11;
-  legend.forEach((item, index) => {
-    pdf.text(item.legend, lx, ly);
-    lx += 45;
-    if ((index + 1) % 4 === 0) {
-      lx = margin;
-      ly += 4;
-    }
+  const icons = await buildLegendIconMap(legend.map((item) => item.type));
+  drawColoredLegend(pdf, {
+    items: legend,
+    icons,
+    margin,
+    pageWidth,
+    top: pageHeight - footer + 4,
+    cols,
+    rowH,
   });
 
   if (input.calculation && input.calculation.billOfMaterials.length > 0) {
@@ -112,6 +156,53 @@ export async function exportPlanPdf(input: {
   }
 
   pdf.save(`${input.fileName}-${input.size}.pdf`);
+}
+
+function drawColoredLegend(
+  pdf: jsPDF,
+  input: {
+    items: Array<{ type: SymbolType; legend: string }>;
+    icons: Map<SymbolType, string>;
+    margin: number;
+    pageWidth: number;
+    top: number;
+    cols: number;
+    rowH: number;
+  },
+) {
+  const { items, icons, margin, pageWidth, top, cols, rowH } = input;
+  const usable = pageWidth - margin * 2;
+  const colW = usable / cols;
+  const iconBox = 6.2;
+
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(9);
+  pdf.setTextColor(30);
+  pdf.text("Legendă", margin, top);
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+  pdf.setTextColor(40);
+
+  items.forEach((item, index) => {
+    const col = index % cols;
+    const row = Math.floor(index / cols);
+    const lx = margin + col * colW;
+    const ly = top + 3 + row * rowH;
+    const icon = icons.get(item.type);
+    if (icon) {
+      const size = getSymbolSvgSize(item.type);
+      const aspect = size.width / Math.max(1, size.height);
+      const drawH = iconBox;
+      const drawW = Math.min(colW * 0.28, iconBox * aspect);
+      pdf.addImage(icon, "PNG", lx, ly, drawW, drawH);
+      pdf.text(item.legend, lx + drawW + 1.6, ly + drawH * 0.72);
+    } else {
+      pdf.text(item.legend, lx, ly + 4.5);
+    }
+  });
+
+  pdf.setTextColor(0);
 }
 
 /** Build CSV text for the calculation BOM (UTF-8 with BOM for Excel). */
