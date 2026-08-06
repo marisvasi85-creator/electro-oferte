@@ -19,11 +19,17 @@ import {
   uploadPlanBackground,
 } from "../../../lib/plan-electric/data";
 import { importPlanFile } from "../../../lib/plan-electric/import-plan";
-import { exportPlanImage, exportPlanPdf } from "../../../lib/plan-electric/export";
 import {
-  estimateCable,
+  exportMaterialsCsv,
+  exportMaterialsPdf,
+  exportPlanImage,
+  exportPlanPdf,
+} from "../../../lib/plan-electric/export";
+import {
+  calculateProject,
   mergeCableSettings,
   metersPerPixelFromCalibration,
+  toCableEstimate,
 } from "../../../lib/plan-electric/cable";
 import type { CableSettings, PlanPage, PlanProject, SymbolInstance, SymbolType } from "../../../lib/plan-electric/types";
 import { getSymbolDefinition, DEFAULT_SYMBOL_SCALE, DEFAULT_LED_LENGTH_PX } from "../../../lib/plan-electric/symbols";
@@ -150,9 +156,13 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
     [history.present, selectedId],
   );
 
-  const cableEstimate = useMemo(
-    () => estimateCable(history.present, settings),
+  const calculation = useMemo(
+    () => calculateProject(history.present, settings),
     [history.present, settings],
+  );
+  const cableEstimate = useMemo(
+    () => toCableEstimate(calculation, history.present),
+    [calculation, history.present],
   );
 
   const calibrationPixels = useMemo(() => {
@@ -265,12 +275,34 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
           symbols: history.present,
           size: format === "pdf-a3" ? "a3" : "a4",
           fileName,
+          calculation,
         });
       }
       setBusy("Export finalizat.");
       window.setTimeout(() => setBusy(""), 1200);
     } catch (error) {
       setBusy(error instanceof Error ? error.message : "Export eșuat.");
+    }
+  }
+
+  async function handleExportMaterials(format: "csv" | "pdf") {
+    if (!project) return;
+    if (!calculation.billOfMaterials.length) {
+      setBusy("Nu există materiale de exportat — plasează aparate pe plan.");
+      window.setTimeout(() => setBusy(""), 1800);
+      return;
+    }
+    setBusy("Se exportă devizul…");
+    try {
+      if (format === "csv") {
+        await exportMaterialsCsv({ project, calculation });
+      } else {
+        await exportMaterialsPdf({ project, calculation });
+      }
+      setBusy("Deviz exportat.");
+      window.setTimeout(() => setBusy(""), 1200);
+    } catch (error) {
+      setBusy(error instanceof Error ? error.message : "Export deviz eșuat.");
     }
   }
 
@@ -336,6 +368,9 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
         calibrating={calibrating}
         onSave={() => void handleSave()}
         onExport={(format) => void handleExport(format)}
+        onExportMaterialsCsv={() => void handleExportMaterials("csv")}
+        onExportMaterialsPdf={() => void handleExportMaterials("pdf")}
+        canExportMaterials={calculation.billOfMaterials.length > 0}
       />
       <input
         ref={importInput}
@@ -373,6 +408,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
             calibrating={calibrating}
             calibrationPoints={calibrationPoints}
             cableRuns={cableEstimate.runs}
+            routeSegments={cableEstimate.routeSegments}
             showCableGuides={showCableGuides && cableEstimate.calibrated && !cableEstimate.missingPanel}
             guides={guides}
             stageRef={stageRef}
@@ -414,7 +450,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
         <aside className="pe-inspector">
           <CablePanel
             settings={settings}
-            estimate={cableEstimate}
+            calculation={calculation}
             calibrating={calibrating}
             calibrationPixels={calibrationPixels}
             onChangeSettings={patchSettings}
@@ -428,6 +464,8 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
               setCalibrationPoints([]);
             }}
             onApplyCalibration={applyCalibration}
+            onExportMaterialsCsv={() => void handleExportMaterials("csv")}
+            onExportMaterialsPdf={() => void handleExportMaterials("pdf")}
           />
           <Inspector
             symbol={selected}

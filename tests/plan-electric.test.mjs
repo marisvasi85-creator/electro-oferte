@@ -3,12 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("ships Plan Electric module surfaces", async () => {
-  const [projectsPage, editorPage, symbols, migration, home] = await Promise.all([
+  const [projectsPage, editorPage, symbols, migration, home, legend] = await Promise.all([
     readFile(new URL("../app/plan-electric/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/plan-electric/[id]/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/plan-electric/symbols.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260804_plan_electric.sql", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/plan-electric/components/Legend.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(projectsPage, /PlanProjectsApp|Plan Electric/);
@@ -26,24 +27,42 @@ test("ships Plan Electric module surfaces", async () => {
   assert.match(migration, /plan_symbol_instances/);
   assert.match(migration, /plan-backgrounds/);
   assert.match(home, /\/plan-electric/);
+  assert.match(legend, /pe-legend-toggle|is-collapsed/);
+  assert.match(legend, /Minimizează legenda|Extinde legenda/);
 });
 
-test("ships cable calculation surfaces", async () => {
-  const [cable, editor, panel, migration] = await Promise.all([
+test("ships calculation engine surfaces", async () => {
+  const [cable, engine, catalog, editor, panel, migration] = await Promise.all([
     readFile(new URL("../lib/plan-electric/cable.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/plan-electric/calculation/engine.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/plan-electric/catalog/defaults.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/plan-electric/[id]/editor-app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/plan-electric/components/CablePanel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260804_plan_electric_cable_settings.sql", import.meta.url), "utf8"),
   ]);
 
+  assert.match(cable, /calculateProject/);
   assert.match(cable, /estimateCable/);
-  assert.match(cable, /floor_orthogonal/);
-  assert.match(cable, /outletHeightM/);
-  assert.match(cable, /switchHeightM/);
+  assert.match(cable, /routingMode/);
+  assert.match(engine, /registerCalculationRule/);
+  assert.match(engine, /runCalculationEngine/);
+  assert.match(catalog, /cable\.n2xh\.3x1\.5/);
+  assert.match(catalog, /cable\.n2xh\.3x2\.5/);
+  assert.match(catalog, /deviceBoxes/);
   assert.match(editor, /CablePanel/);
-  assert.match(editor, /estimateCable/);
-  assert.match(panel, /Cablu pardoseală/);
+  assert.match(editor, /calculateProject/);
+  assert.match(panel, /Deviz materiale/);
+  assert.match(panel, /Descarcă CSV|Descarcă PDF/);
+
+  const toolbar = await readFile(new URL("../app/plan-electric/components/Toolbar.tsx", import.meta.url), "utf8");
+  assert.match(toolbar, /Deviz CSV/);
+  assert.match(toolbar, /Deviz PDF/);
   assert.match(migration, /settings jsonb/);
+
+  const exportModule = await readFile(new URL("../lib/plan-electric/export.ts", import.meta.url), "utf8");
+  assert.match(exportModule, /buildMaterialsCsv/);
+  assert.match(exportModule, /exportMaterialsPdf/);
+  assert.match(exportModule, /appendMaterialsPdfPages|billOfMaterials/);
 });
 
 test("floor cable formula: panel drop + orthogonal floor + device rise", () => {

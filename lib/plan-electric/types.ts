@@ -29,6 +29,12 @@ export type CableSettings = {
   reservePercent: number;
   /** Floor routing model. */
   routing: "floor_orthogonal" | "floor_euclidean";
+  /**
+   * Logical cable topology.
+   * circuit_tree = nearest-neighbor spanning tree per circuit (default, closer to real installs).
+   * home_run = each device fed independently from the panel.
+   */
+  routingMode: "circuit_tree" | "home_run";
 };
 
 export type PlanPage = {
@@ -63,6 +69,8 @@ export type CableEstimate = {
   panelCount: number;
   calibrated: boolean;
   missingPanel: boolean;
+  /** Actual calculated route edges for canvas guides (tree or home-run). */
+  routeSegments?: Array<{ fromId: string; toId: string }>;
 };
 
 export type SymbolCategory = "prize" | "intrerupatoare" | "iluminat" | "diverse";

@@ -24,6 +24,9 @@ type ToolbarProps = {
   onCalibrate: () => void;
   onSave: () => void;
   onExport: (format: "pdf-a4" | "pdf-a3" | "png" | "jpeg") => void;
+  onExportMaterialsCsv?: () => void;
+  onExportMaterialsPdf?: () => void;
+  canExportMaterials?: boolean;
 };
 
 export function PlanToolbar({
@@ -50,6 +53,9 @@ export function PlanToolbar({
   onCalibrate,
   onSave,
   onExport,
+  onExportMaterialsCsv,
+  onExportMaterialsPdf,
+  canExportMaterials = false,
 }: ToolbarProps) {
   return (
     <header className="pe-toolbar">
@@ -85,6 +91,24 @@ export function PlanToolbar({
           <button type="button" onClick={() => onExport("pdf-a3")}>PDF A3</button>
           <button type="button" onClick={() => onExport("png")}>PNG</button>
           <button type="button" onClick={() => onExport("jpeg")}>JPEG</button>
+          <button
+            type="button"
+            className="pe-deviz-btn"
+            disabled={!canExportMaterials || !onExportMaterialsCsv}
+            onClick={() => onExportMaterialsCsv?.()}
+            title="Descarcă devizul de materiale CSV"
+          >
+            Deviz CSV
+          </button>
+          <button
+            type="button"
+            className="pe-deviz-btn"
+            disabled={!canExportMaterials || !onExportMaterialsPdf}
+            onClick={() => onExportMaterialsPdf?.()}
+            title="Descarcă devizul de materiale PDF"
+          >
+            Deviz PDF
+          </button>
         </div>
       </div>
     </header>

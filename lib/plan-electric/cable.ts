@@ -1,5 +1,29 @@
+/**
+ * Compatibility facade over the Calculation Engine.
+ * Existing UI that expects CableEstimate / mergeCableSettings continues to work.
+ */
+
 import { getSymbolDefinition } from "./symbols";
-import type { CableEstimate, CableRun, CableSettings, SymbolInstance, SymbolType } from "./types";
+import {
+  mergeCalculationConfig,
+  runCalculationEngine,
+  type CalculationResult,
+} from "./calculation";
+import {
+  defaultMountingHeightM,
+  resolveMountingHeightM,
+} from "./calculation/heights";
+import type {
+  CableEstimate,
+  CableRun,
+  CableSettings,
+  SymbolCategory,
+  SymbolInstance,
+  SymbolType,
+} from "./types";
+
+export type { CalculationResult };
+export { defaultMountingHeightM, resolveMountingHeightM };
 
 export const DEFAULT_CABLE_SETTINGS: CableSettings = {
   metersPerPixel: null,
@@ -12,6 +36,7 @@ export const DEFAULT_CABLE_SETTINGS: CableSettings = {
   detectorHeightM: 2.5,
   reservePercent: 10,
   routing: "floor_orthogonal",
+  routingMode: "circuit_tree",
 };
 
 export function mergeCableSettings(partial?: Partial<CableSettings> | null): CableSettings {
@@ -31,49 +56,26 @@ export function isCableConsumer(type: SymbolType): boolean {
     || type === "detector_gaz";
 }
 
-export function defaultMountingHeightM(type: SymbolType, settings: CableSettings): number {
-  if (type === "tablou_electric") return settings.panelHeightM;
-  const category = getSymbolDefinition(type).category;
-  if (category === "prize") return settings.outletHeightM;
-  if (category === "intrerupatoare") return settings.switchHeightM;
-  if (category === "iluminat") return settings.lightHeightM;
-  if (type === "detector_fum" || type === "detector_gaz") return settings.detectorHeightM;
-  return settings.outletHeightM;
-}
-
-export function resolveMountingHeightM(symbol: SymbolInstance, settings: CableSettings): number {
-  const override = symbol.metadata?.mountingHeightM;
-  if (typeof override === "number" && Number.isFinite(override) && override >= 0) {
-    return override;
-  }
-  return defaultMountingHeightM(symbol.symbolType, settings);
-}
-
-function horizontalMeters(
-  from: { x: number; y: number },
-  to: { x: number; y: number },
-  metersPerPixel: number,
-  routing: CableSettings["routing"],
-): number {
-  const dx = Math.abs(to.x - from.x);
-  const dy = Math.abs(to.y - from.y);
-  const pixels = routing === "floor_euclidean" ? Math.hypot(dx, dy) : dx + dy;
-  return pixels * metersPerPixel;
-}
-
-function categoryKey(type: SymbolType): keyof CableEstimate["byCategory"] {
-  if (type === "detector_fum" || type === "detector_gaz") return "diverse";
-  return getSymbolDefinition(type).category;
+/** Full professional calculation — preferred API for UI and future adapters. */
+export function calculateProject(
+  symbols: SymbolInstance[],
+  settings?: Partial<CableSettings> | null,
+): CalculationResult {
+  return runCalculationEngine({
+    symbols,
+    config: mergeCableSettings(settings),
+  });
 }
 
 /**
- * Floor cabling model:
- * drop from panel to floor + orthogonal/euclidean floor run + rise to device height.
- * L = H_panel + L_floor + H_device
+ * Legacy cable estimate for canvas guides and older callers.
+ * Built on top of the calculation engine (circuit-tree routing by default).
  */
 export function estimateCable(symbols: SymbolInstance[], settings: CableSettings): CableEstimate {
-  const panels = symbols.filter((symbol) => symbol.symbolType === "tablou_electric");
-  const consumers = symbols.filter((symbol) => isCableConsumer(symbol.symbolType));
+  return toCableEstimate(calculateProject(symbols, settings), symbols);
+}
+
+export function toCableEstimate(result: CalculationResult, symbols: SymbolInstance[]): CableEstimate {
   const byCategory: CableEstimate["byCategory"] = {
     prize: 0,
     intrerupatoare: 0,
@@ -81,70 +83,34 @@ export function estimateCable(symbols: SymbolInstance[], settings: CableSettings
     diverse: 0,
   };
 
-  if (!settings.metersPerPixel || settings.metersPerPixel <= 0) {
-    return {
-      runs: [],
-      byCategory,
-      rawTotalM: 0,
-      withReserveM: 0,
-      deviceCount: consumers.length,
-      panelCount: panels.length,
-      calibrated: false,
-      missingPanel: true,
-    };
+  for (const segment of result.segments) {
+    byCategory[segment.category] += segment.totalM;
   }
 
-  if (!panels.length) {
-    return {
-      runs: [],
-      byCategory,
-      rawTotalM: 0,
-      withReserveM: 0,
-      deviceCount: consumers.length,
-      panelCount: 0,
-      calibrated: true,
-      missingPanel: true,
-    };
-  }
-
-  const runs: CableRun[] = consumers.map((device) => {
-    const panel = panels.reduce((best, candidate) => {
-      const bestDist = Math.hypot(best.x - device.x, best.y - device.y);
-      const nextDist = Math.hypot(candidate.x - device.x, candidate.y - device.y);
-      return nextDist < bestDist ? candidate : best;
-    });
-    const deviceHeight = resolveMountingHeightM(device, settings);
-    const panelHeight = resolveMountingHeightM(panel, settings);
-    const floorM = horizontalMeters(panel, device, settings.metersPerPixel!, settings.routing);
-    const dropM = Math.max(0, panelHeight);
-    const riseM = Math.max(0, deviceHeight);
-    const totalM = dropM + floorM + riseM;
-    const category = categoryKey(device.symbolType);
-    byCategory[category] += totalM;
-    return {
-      deviceId: device.id,
-      panelId: panel.id,
-      label: device.label || getSymbolDefinition(device.symbolType).label,
-      category,
-      floorM,
-      dropM,
-      riseM,
-      totalM,
-    };
-  });
-
-  const rawTotalM = runs.reduce((sum, run) => sum + run.totalM, 0);
-  const withReserveM = rawTotalM * (1 + Math.max(0, settings.reservePercent) / 100);
+  const runs: CableRun[] = result.visualRuns.map((run) => ({
+    deviceId: run.deviceId,
+    panelId: run.panelId,
+    label: run.label,
+    category: run.category,
+    floorM: run.floorM,
+    dropM: run.dropM,
+    riseM: run.riseM,
+    totalM: run.totalM,
+  }));
 
   return {
     runs,
     byCategory,
-    rawTotalM,
-    withReserveM,
-    deviceCount: consumers.length,
-    panelCount: panels.length,
-    calibrated: true,
-    missingPanel: false,
+    rawTotalM: result.totals.cableRawM,
+    withReserveM: result.totals.cableWithReserveM,
+    deviceCount: result.counts.devicesTotal || symbols.filter((s) => isCableConsumer(s.symbolType)).length,
+    panelCount: result.counts.panels,
+    calibrated: result.calibrated,
+    missingPanel: result.missingPanel,
+    routeSegments: result.segments.map((segment) => ({
+      fromId: segment.fromId,
+      toId: segment.toId,
+    })),
   };
 }
 
@@ -158,3 +124,11 @@ export function metersPerPixelFromCalibration(pixelDistance: number, realDistanc
   if (!(pixelDistance > 0) || !(realDistanceM > 0)) return null;
   return realDistanceM / pixelDistance;
 }
+
+export function categoryKey(type: SymbolType): SymbolCategory {
+  if (type === "detector_fum" || type === "detector_gaz") return "diverse";
+  return getSymbolDefinition(type).category;
+}
+
+/** Re-export config merge used by the engine. */
+export { mergeCalculationConfig };
