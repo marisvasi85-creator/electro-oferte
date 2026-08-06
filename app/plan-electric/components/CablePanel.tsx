@@ -14,6 +14,8 @@ type CablePanelProps = {
   onStartCalibration: () => void;
   onCancelCalibration: () => void;
   onApplyCalibration: (realDistanceM: number) => void;
+  onExportMaterialsCsv?: () => void;
+  onExportMaterialsPdf?: () => void;
 };
 
 export function CablePanel({
@@ -25,6 +27,8 @@ export function CablePanel({
   onStartCalibration,
   onCancelCalibration,
   onApplyCalibration,
+  onExportMaterialsCsv,
+  onExportMaterialsPdf,
 }: CablePanelProps) {
   const [calibrateMeters, setCalibrateMeters] = useState(
     String(settings.calibrationRealDistanceM ?? 1),
@@ -118,6 +122,24 @@ export function CablePanel({
         <>
           <div className="pe-panel-title pe-panel-title-tight">
             <span>Deviz materiale</span>
+          </div>
+          <div className="pe-export-group pe-bom-export">
+            <button
+              type="button"
+              className="pe-cable-calibrate-btn"
+              disabled={!onExportMaterialsCsv}
+              onClick={() => onExportMaterialsCsv?.()}
+            >
+              Export CSV
+            </button>
+            <button
+              type="button"
+              className="pe-cable-calibrate-btn"
+              disabled={!onExportMaterialsPdf}
+              onClick={() => onExportMaterialsPdf?.()}
+            >
+              Export PDF deviz
+            </button>
           </div>
           <div className="pe-bom-list">
             {calculation.billOfMaterials.map((line) => (

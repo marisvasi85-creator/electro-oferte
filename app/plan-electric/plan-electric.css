@@ -196,6 +196,15 @@
   font-weight: 700;
   white-space: nowrap;
 }
+.pe-bom-export {
+  margin: 0 0 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.pe-bom-export .pe-cable-calibrate-btn {
+  margin-bottom: 0;
+}
 .pe-bom-list {
   display: grid;
   gap: 6px;

@@ -49,7 +49,13 @@ test("ships calculation engine surfaces", async () => {
   assert.match(editor, /CablePanel/);
   assert.match(editor, /calculateProject/);
   assert.match(panel, /Calculation Engine|Deviz materiale/);
+  assert.match(panel, /Export CSV|Export PDF deviz/);
   assert.match(migration, /settings jsonb/);
+
+  const exportModule = await readFile(new URL("../lib/plan-electric/export.ts", import.meta.url), "utf8");
+  assert.match(exportModule, /buildMaterialsCsv/);
+  assert.match(exportModule, /exportMaterialsPdf/);
+  assert.match(exportModule, /appendMaterialsPdfPages|billOfMaterials/);
 });
 
 test("floor cable formula: panel drop + orthogonal floor + device rise", () => {

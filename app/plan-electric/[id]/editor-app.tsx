@@ -19,7 +19,12 @@ import {
   uploadPlanBackground,
 } from "../../../lib/plan-electric/data";
 import { importPlanFile } from "../../../lib/plan-electric/import-plan";
-import { exportPlanImage, exportPlanPdf } from "../../../lib/plan-electric/export";
+import {
+  exportMaterialsCsv,
+  exportMaterialsPdf,
+  exportPlanImage,
+  exportPlanPdf,
+} from "../../../lib/plan-electric/export";
 import {
   calculateProject,
   mergeCableSettings,
@@ -270,12 +275,34 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
           symbols: history.present,
           size: format === "pdf-a3" ? "a3" : "a4",
           fileName,
+          calculation,
         });
       }
       setBusy("Export finalizat.");
       window.setTimeout(() => setBusy(""), 1200);
     } catch (error) {
       setBusy(error instanceof Error ? error.message : "Export eșuat.");
+    }
+  }
+
+  async function handleExportMaterials(format: "csv" | "pdf") {
+    if (!project) return;
+    if (!calculation.billOfMaterials.length) {
+      setBusy("Nu există materiale de exportat — plasează aparate pe plan.");
+      window.setTimeout(() => setBusy(""), 1800);
+      return;
+    }
+    setBusy("Se exportă devizul…");
+    try {
+      if (format === "csv") {
+        await exportMaterialsCsv({ project, calculation });
+      } else {
+        await exportMaterialsPdf({ project, calculation });
+      }
+      setBusy("Deviz exportat.");
+      window.setTimeout(() => setBusy(""), 1200);
+    } catch (error) {
+      setBusy(error instanceof Error ? error.message : "Export deviz eșuat.");
     }
   }
 
@@ -434,6 +461,8 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
               setCalibrationPoints([]);
             }}
             onApplyCalibration={applyCalibration}
+            onExportMaterialsCsv={() => void handleExportMaterials("csv")}
+            onExportMaterialsPdf={() => void handleExportMaterials("pdf")}
           />
           <Inspector
             symbol={selected}

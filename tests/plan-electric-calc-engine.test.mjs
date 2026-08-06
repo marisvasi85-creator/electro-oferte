@@ -7,6 +7,7 @@ import {
 } from "../lib/plan-electric/cable";
 import { DEFAULT_MATERIAL_CATALOG } from "../lib/plan-electric/catalog";
 import { registerCalculationRule, runCalculationEngine } from "../lib/plan-electric/calculation";
+import { buildMaterialsCsv } from "../lib/plan-electric/export";
 
 function sym(partial) {
   return {
@@ -136,4 +137,34 @@ test("registerCalculationRule extends engine without changing core rules", () =>
     config: calibrated,
   });
   assert.ok(result.diagnostics.includes("I7 stub rule active"));
+});
+
+test("materials CSV export includes BOM lines and summary", () => {
+  const symbols = [
+    sym({ id: "p1", symbolType: "tablou_electric", x: 0, y: 0 }),
+    sym({ id: "s1", symbolType: "priza_simpla", x: 100, y: 0 }),
+    sym({ id: "l1", symbolType: "corp_iluminat", x: 200, y: 0 }),
+  ];
+  const calculation = calculateProject(symbols, calibrated);
+  const csv = buildMaterialsCsv({
+    project: {
+      id: "proj",
+      ownerId: "o",
+      companyId: "c",
+      name: "Casa Test",
+      client: "Client Demo",
+      address: "Strada 1",
+      notes: "",
+      createdAt: "",
+      updatedAt: "",
+    },
+    calculation,
+  });
+
+  assert.match(csv, /Casa Test/);
+  assert.match(csv, /Client Demo/);
+  assert.match(csv, /Cod tehnic/);
+  assert.match(csv, /accessory\.device_box|Doz/);
+  assert.match(csv, /cable\.n2xh/);
+  assert.match(csv, /Prize/);
 });
