@@ -368,6 +368,9 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
         calibrating={calibrating}
         onSave={() => void handleSave()}
         onExport={(format) => void handleExport(format)}
+        onExportMaterialsCsv={() => void handleExportMaterials("csv")}
+        onExportMaterialsPdf={() => void handleExportMaterials("pdf")}
+        canExportMaterials={calculation.billOfMaterials.length > 0}
       />
       <input
         ref={importInput}

@@ -205,6 +205,22 @@
 .pe-bom-export .pe-cable-calibrate-btn {
   margin-bottom: 0;
 }
+.pe-bom-primary {
+  border-color: rgba(56, 189, 248, 0.55) !important;
+  background: rgba(14, 116, 144, 0.35) !important;
+  color: #e0f2fe !important;
+}
+.pe-bom-primary:disabled {
+  opacity: 0.45;
+}
+.pe-toolbar .pe-deviz-btn {
+  border-color: rgba(56, 189, 248, 0.55);
+  background: rgba(14, 116, 144, 0.28);
+  color: #bae6fd;
+}
+.pe-toolbar .pe-deviz-btn:disabled {
+  opacity: 0.4;
+}
 .pe-bom-list {
   display: grid;
   gap: 6px;

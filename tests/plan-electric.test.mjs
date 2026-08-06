@@ -48,8 +48,12 @@ test("ships calculation engine surfaces", async () => {
   assert.match(catalog, /deviceBoxes/);
   assert.match(editor, /CablePanel/);
   assert.match(editor, /calculateProject/);
-  assert.match(panel, /Calculation Engine|Deviz materiale/);
-  assert.match(panel, /Export CSV|Export PDF deviz/);
+  assert.match(panel, /Deviz materiale/);
+  assert.match(panel, /Descarcă CSV|Descarcă PDF/);
+
+  const toolbar = await readFile(new URL("../app/plan-electric/components/Toolbar.tsx", import.meta.url), "utf8");
+  assert.match(toolbar, /Deviz CSV/);
+  assert.match(toolbar, /Deviz PDF/);
   assert.match(migration, /settings jsonb/);
 
   const exportModule = await readFile(new URL("../lib/plan-electric/export.ts", import.meta.url), "utf8");
