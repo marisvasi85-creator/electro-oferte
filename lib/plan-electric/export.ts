@@ -114,11 +114,14 @@ export async function exportPlanPdf(input: {
   const header = 16;
   const legend = usedLegend(input.symbols);
   const cols = pageWidth >= 350 ? 5 : 4;
-  const rowH = 7.2;
-  const legendBlockH = legend.length
-    ? 7 + Math.ceil(legend.length / cols) * rowH
-    : 10;
-  const footer = Math.min(pageHeight * 0.42, Math.max(22, legendBlockH + 4));
+  const rowH = 6.8;
+  const gapPlanLegend = 6;
+  const legendTitleH = 5;
+  const bottomMargin = 6;
+  const legendRows = legend.length ? Math.ceil(legend.length / cols) : 0;
+  const legendBlockH = legend.length ? legendTitleH + legendRows * rowH : 0;
+  // Reserve full legend height under the plan so icons never overlap the drawing.
+  const footer = legendBlockH + gapPlanLegend + bottomMargin;
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(12);
@@ -129,7 +132,7 @@ export async function exportPlanPdf(input: {
   if (input.project.address) pdf.text(input.project.address, margin + 70, 15);
 
   const maxW = pageWidth - margin * 2;
-  const maxH = pageHeight - header - footer;
+  const maxH = Math.max(40, pageHeight - header - footer);
   const ratio = Math.min(maxW / input.page.width, maxH / input.page.height);
   const drawW = input.page.width * ratio;
   const drawH = input.page.height * ratio;
@@ -137,13 +140,23 @@ export async function exportPlanPdf(input: {
   const y = header + 2;
   pdf.addImage(dataUrl, "JPEG", x, y, drawW, drawH);
 
+  const planBottom = y + drawH;
+  const legendTop = planBottom + gapPlanLegend;
+
+  // Clear strip + separator so the plan edge never reads as covered by the legend.
+  pdf.setFillColor(255, 255, 255);
+  pdf.rect(0, planBottom + 1, pageWidth, pageHeight - planBottom - 1, "F");
+  pdf.setDrawColor(180);
+  pdf.setLineWidth(0.3);
+  pdf.line(margin, planBottom + gapPlanLegend * 0.45, pageWidth - margin, planBottom + gapPlanLegend * 0.45);
+
   const icons = await buildLegendIconMap(legend.map((item) => item.type));
   drawColoredLegend(pdf, {
     items: legend,
     icons,
     margin,
     pageWidth,
-    top: pageHeight - footer + 4,
+    top: legendTop,
     cols,
     rowH,
   });
