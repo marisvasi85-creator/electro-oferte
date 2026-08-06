@@ -57,7 +57,15 @@ test("ships calculation engine surfaces", async () => {
   const toolbar = await readFile(new URL("../app/plan-electric/components/Toolbar.tsx", import.meta.url), "utf8");
   assert.match(toolbar, /Deviz CSV/);
   assert.match(toolbar, /Deviz PDF/);
+  assert.match(toolbar, /Bibliotecă/);
+  assert.match(toolbar, /onToggleLibrary/);
+  assert.match(editor, /libraryOpen|onToggleLibrary|setLibraryOpen/);
   assert.match(migration, /settings jsonb/);
+
+  const css = await readFile(new URL("../app/plan-electric/plan-electric.css", import.meta.url), "utf8");
+  assert.match(css, /pe-sidebar\.is-open/);
+  assert.match(css, /pe-drawer-backdrop/);
+  assert.match(css, /pe-mobile-tools/);
 
   const [exportModule, symbolSvg] = await Promise.all([
     readFile(new URL("../lib/plan-electric/export.ts", import.meta.url), "utf8"),

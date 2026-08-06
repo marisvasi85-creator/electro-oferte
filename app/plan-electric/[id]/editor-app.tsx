@@ -48,6 +48,8 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [panMode, setPanMode] = useState(false);
   const [showCableGuides, setShowCableGuides] = useState(true);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<{ x: number; y: number }[]>([]);
   const [busy, setBusy] = useState("Se încarcă proiectul…");
@@ -221,6 +223,7 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
     };
     history.set((symbols) => [...symbols, instance]);
     setSelectedId(instance.id);
+    setLibraryOpen(false);
   }, [calibrating, history, page]);
 
   async function handleImport(file: File) {
@@ -371,6 +374,16 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
         onExportMaterialsCsv={() => void handleExportMaterials("csv")}
         onExportMaterialsPdf={() => void handleExportMaterials("pdf")}
         canExportMaterials={calculation.billOfMaterials.length > 0}
+        libraryOpen={libraryOpen}
+        inspectorOpen={inspectorOpen}
+        onToggleLibrary={() => {
+          setLibraryOpen((value) => !value);
+          setInspectorOpen(false);
+        }}
+        onToggleInspector={() => {
+          setInspectorOpen((value) => !value);
+          setLibraryOpen(false);
+        }}
       />
       <input
         ref={importInput}
@@ -383,8 +396,10 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
           event.currentTarget.value = "";
         }}
       />
-      <div className="pe-workspace">
+      <div className={`pe-workspace${inspectorOpen ? " inspector-open" : ""}${libraryOpen ? " library-open" : ""}`}>
         <SidebarSymbols
+          open={libraryOpen}
+          onClose={() => setLibraryOpen(false)}
           onPlace={(type) => placeSymbol(type)}
           onDragStart={(type, event) => {
             event.dataTransfer.setData("application/plan-symbol", type);
@@ -447,7 +462,13 @@ export function PlanEditorApp({ projectId }: { projectId: string }) {
           />
           <Legend symbols={history.present} />
         </div>
-        <aside className="pe-inspector">
+        <aside className={`pe-inspector${inspectorOpen ? " is-open" : ""}`}>
+          <div className="pe-inspector-mobile-bar">
+            <strong>Deviz & proprietăți</strong>
+            <button type="button" className="pe-drawer-close" onClick={() => setInspectorOpen(false)} aria-label="Închide">
+              ✕
+            </button>
+          </div>
           <CablePanel
             settings={settings}
             calculation={calculation}

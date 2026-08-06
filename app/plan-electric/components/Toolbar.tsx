@@ -10,6 +10,8 @@ type ToolbarProps = {
   canRedo: boolean;
   busy?: string;
   cableTotalLabel?: string;
+  libraryOpen?: boolean;
+  inspectorOpen?: boolean;
   onBack: () => void;
   onImport: () => void;
   onUndo: () => void;
@@ -23,6 +25,8 @@ type ToolbarProps = {
   onTogglePanMode: () => void;
   onCalibrate: () => void;
   onSave: () => void;
+  onToggleLibrary?: () => void;
+  onToggleInspector?: () => void;
   onExport: (format: "pdf-a4" | "pdf-a3" | "png" | "jpeg") => void;
   onExportMaterialsCsv?: () => void;
   onExportMaterialsPdf?: () => void;
@@ -39,6 +43,8 @@ export function PlanToolbar({
   canRedo,
   busy,
   cableTotalLabel,
+  libraryOpen = false,
+  inspectorOpen = false,
   onBack,
   onImport,
   onUndo,
@@ -52,6 +58,8 @@ export function PlanToolbar({
   onTogglePanMode,
   onCalibrate,
   onSave,
+  onToggleLibrary,
+  onToggleInspector,
   onExport,
   onExportMaterialsCsv,
   onExportMaterialsPdf,
@@ -66,6 +74,24 @@ export function PlanToolbar({
         {busy && <span className="pe-busy">{busy}</span>}
       </div>
       <div className="pe-toolbar-actions">
+        <div className="pe-mobile-tools">
+          <button
+            type="button"
+            data-tool="library"
+            className={libraryOpen ? "active pe-mobile-primary" : "pe-mobile-primary"}
+            onClick={onToggleLibrary}
+          >
+            Bibliotecă
+          </button>
+          <button
+            type="button"
+            data-tool="deviz"
+            className={inspectorOpen ? "active pe-mobile-primary" : "pe-mobile-primary"}
+            onClick={onToggleInspector}
+          >
+            Deviz
+          </button>
+        </div>
         <button type="button" onClick={onImport}>Import</button>
         <button type="button" onClick={onUndo} disabled={!canUndo}>Undo</button>
         <button type="button" onClick={onRedo} disabled={!canRedo}>Redo</button>
