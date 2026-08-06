@@ -59,10 +59,18 @@ test("ships calculation engine surfaces", async () => {
   assert.match(toolbar, /Deviz PDF/);
   assert.match(migration, /settings jsonb/);
 
-  const exportModule = await readFile(new URL("../lib/plan-electric/export.ts", import.meta.url), "utf8");
+  const [exportModule, symbolSvg] = await Promise.all([
+    readFile(new URL("../lib/plan-electric/export.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/plan-electric/symbol-svg.ts", import.meta.url), "utf8"),
+  ]);
   assert.match(exportModule, /buildMaterialsCsv/);
   assert.match(exportModule, /exportMaterialsPdf/);
   assert.match(exportModule, /appendMaterialsPdfPages|billOfMaterials/);
+  assert.match(exportModule, /drawColoredLegend|rasterizeSymbolPng/);
+  assert.match(symbolSvg, /getSymbolSvgMarkup/);
+  assert.match(symbolSvg, /xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+  assert.match(symbolSvg, /SYMBOL_COLORS/);
+  assert.match(symbolSvg, /stroke="\$\{R\}"|stroke="\$\{B\}"|stroke="\$\{G\}"/);
 });
 
 test("floor cable formula: panel drop + orthogonal floor + device rise", () => {

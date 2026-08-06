@@ -271,8 +271,10 @@
   color: var(--pe-text);
   cursor: grab;
 }
+.pe-symbol-svg { display: grid; place-items: center; line-height: 0; }
+.pe-symbol-svg svg { display: block; }
 .pe-symbol-card svg { width: 34px; height: 30px; }
-.pe-symbol-card span { font-size: 10px; text-align: center; color: #cbd5e1; line-height: 1.25; }
+.pe-symbol-card > span { font-size: 10px; text-align: center; color: #cbd5e1; line-height: 1.25; }
 .pe-symbol-card:hover { border-color: var(--pe-accent); }
 
 .pe-canvas-wrap { position: relative; min-width: 0; background: #0a0e14; }
