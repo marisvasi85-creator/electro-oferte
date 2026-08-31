@@ -58,48 +58,94 @@ export function firstPopulatedSheet(input: unknown): unknown[][] {
   return sheets.find((sheet) => Array.isArray(sheet.data) && sheet.data.length)?.data ?? [];
 }
 
+function headerMatches(cell: string, candidate: string) {
+  if (!cell || !candidate) return false;
+  if (cell === candidate) return true;
+  // Accept longer Excel headers like "pretunitarfaratva" for "pretunitar".
+  if (candidate.length >= 4 && (cell.startsWith(candidate) || cell.includes(candidate))) return true;
+  if (cell.length >= 4 && candidate.includes(cell)) return true;
+  return false;
+}
+
 function findHeader(rows: unknown[][], requiredGroups: string[][]) {
   return rows.findIndex((row) => {
     const cells = row.map(normalized);
-    return requiredGroups.every((group) => cells.some((cell) => group.includes(cell)));
+    return requiredGroups.every((group) =>
+      cells.some((cell) => group.some((candidate) => headerMatches(cell, candidate))),
+    );
   });
 }
 
 function column(headers: unknown[], names: string[]) {
-  return headers.map(normalized).findIndex((header) => names.includes(header));
+  const cells = headers.map(normalized);
+  for (const name of names) {
+    const exact = cells.findIndex((cell) => cell === name);
+    if (exact >= 0) return exact;
+  }
+  for (const name of names) {
+    const fuzzy = cells.findIndex((cell) => headerMatches(cell, name));
+    if (fuzzy >= 0) return fuzzy;
+  }
+  return -1;
 }
 
 function cellText(rows: unknown[][]) {
   return rows.flat().map((cell) => String(cell ?? "").trim()).filter(Boolean);
 }
 
+function inferKind(value: unknown): ImportedOfferItem["kind"] {
+  const text = normalized(value);
+  if (text.includes("labor") || text.includes("manoper") || text.includes("servici")) return "labor";
+  if (text.includes("expense") || text.includes("chelt") || text.includes("cost")) return "expense";
+  return "material";
+}
+
+function extractClient(rows: unknown[][], texts: string[], title: string) {
+  for (const row of rows) {
+    for (let index = 0; index < row.length; index += 1) {
+      const cell = String(row[index] ?? "").trim();
+      if (/^beneficiar\s*:/i.test(cell)) {
+        const inline = cell.replace(/^.*beneficiar\s*:\s*/i, "").trim();
+        if (inline) return inline;
+        const next = String(row[index + 1] ?? "").trim();
+        if (next) return next;
+      }
+      if (/^beneficiar$/i.test(cell)) {
+        const next = String(row[index + 1] ?? "").trim();
+        if (next) return next;
+      }
+    }
+  }
+  const beneficiary = texts.find((value) => /beneficiar\s*:/i.test(value));
+  if (beneficiary) return beneficiary.replace(/^.*beneficiar\s*:\s*/i, "").trim();
+  return title.replace(/^oferta\s*/i, "").replace(/\s+\d{1,2}[./-]\d{1,2}[./-]\d{2,4}.*$/i, "").trim();
+}
+
 export function parseCatalogRows(rows: unknown[][]) {
   const headerIndex = findHeader(rows.slice(0, 60), [
-    ["denumire", "nume", "name", "material", "articol", "serviciimateriale"],
+    ["denumire", "nume", "name", "material", "articol", "serviciimateriale", "descriere"],
   ]);
   if (headerIndex < 0) return [];
   const headers = rows[headerIndex];
-  const historicalOffer = headers.map(normalized).includes("serviciimateriale");
+  const historicalOffer = headers.map(normalized).some((cell) => headerMatches(cell, "serviciimateriale"));
   const indexes = {
-    name: column(headers, ["denumire", "nume", "name", "material", "articol", "serviciimateriale"]),
+    name: column(headers, ["denumire", "nume", "name", "descriere", "material", "articol", "serviciimateriale"]),
     code: column(headers, ["cod", "code", "sku"]),
     category: column(headers, ["categorie", "category"]),
     subcategory: column(headers, ["subcategorie", "subcategory"]),
     kind: column(headers, ["tip", "kind", "tiparticol"]),
     unit: column(headers, ["um", "unitate", "unit"]),
-    price: column(headers, ["pret", "pretunitar", "unitprice", "price", "pretbuc"]),
+    price: column(headers, ["pretbuc", "pretunitarfaratva", "pretunitar", "unitprice", "price", "pret"]),
     vat: column(headers, ["tva", "vatrate", "vat"]),
     net: column(headers, ["pretfaratva", "totalfaratva"]),
     specs: column(headers, ["specificatii", "specificatie", "specifications", "descriere"]),
   };
+  // Prefer a dedicated specs column; don't reuse the name column.
+  if (indexes.specs === indexes.name) indexes.specs = -1;
+
   return rows.slice(headerIndex + 1).map((row) => {
     const name = String(row[indexes.name] ?? "").trim();
-    const kindText = normalized(indexes.kind >= 0 ? row[indexes.kind] : "");
-    const kind = kindText.includes("manoper") || kindText.includes("servici")
-      ? "labor"
-      : kindText.includes("chelt") || kindText.includes("cost")
-        ? "expense"
-        : "material";
+    const kind = indexes.kind >= 0 ? inferKind(row[indexes.kind]) : "material";
     const rawVat = asNumber(indexes.vat >= 0 ? row[indexes.vat] : 21);
     const net = asNumber(indexes.net >= 0 ? row[indexes.net] : 0);
     const inferredVat = rawVat > 30 && net > 0 ? Math.round((rawVat / net) * 100) : rawVat;
@@ -128,13 +174,15 @@ export function parseCatalogRows(rows: unknown[][]) {
 }
 
 export function parseLegacyOffer(rows: unknown[][]): ImportedOffer {
+  if (!rows.length) {
+    throw new Error("Fișierul Excel pare gol sau nu a putut fi citit.");
+  }
+
   const texts = cellText(rows);
   const joined = texts.join("\n");
   const currency = /\b(?:euro|eur)\b/i.test(joined) ? "EUR" : "RON";
   const title = texts.find((value) => /^oferta\b/i.test(value) && !/valabil/i.test(value)) ?? "Ofertă importată din Excel";
-  const beneficiary = texts.find((value) => /beneficiar\s*:/i.test(value));
-  const client = beneficiary?.replace(/^.*beneficiar\s*:\s*/i, "").trim()
-    || title.replace(/^oferta\s*/i, "").replace(/\s+\d{1,2}[./-]\d{1,2}[./-]\d{2,4}.*$/, "").trim();
+  const client = extractClient(rows, texts, title) || "Client importat";
   const dateValue = rows.flat().find((value) => value instanceof Date)
     ?? texts.map(isoDate).find(Boolean);
   const issueDate = isoDate(dateValue) || today();
@@ -153,28 +201,49 @@ export function parseLegacyOffer(rows: unknown[][]): ImportedOffer {
   if (headerIndex >= 0) {
     const headers = rows[headerIndex];
     const nameIndex = column(headers, ["serviciimateriale", "denumire", "descriere", "articol", "material"]);
+    const kindIndex = column(headers, ["tip", "kind", "tiparticol"]);
     const unitIndex = column(headers, ["um", "unitate", "unit"]);
     const quantityIndex = column(headers, ["cantitate", "cant", "qty"]);
-    const priceIndex = column(headers, ["pretbuc", "pretunitar", "pret", "unitprice", "price"]);
+    const priceIndex = column(headers, [
+      "pretbuc",
+      "pretunitarfaratva",
+      "pretunitar",
+      "unitprice",
+      "price",
+      "pret",
+    ]);
     const netIndex = column(headers, ["pretfaratva", "totalfaratva"]);
-    const vatIndex = column(headers, ["tva", "vat"]);
+    const vatIndex = column(headers, ["tva", "vatrate", "vat"]);
+
     items = rows.slice(headerIndex + 1).map((row, index) => {
       const name = String(row[nameIndex] ?? "").trim();
       const quantity = asNumber(row[quantityIndex]);
-      const unitPrice = asNumber(row[priceIndex]);
+      const unitPrice = asNumber(priceIndex >= 0 ? row[priceIndex] : 0);
       const net = asNumber(netIndex >= 0 ? row[netIndex] : 0);
       const vat = asNumber(vatIndex >= 0 ? row[vatIndex] : 0);
-      const inferredVat = net > 0 && vat > 0 ? Math.round((vat / net) * 100) : 21;
+      // Absolute VAT amount → percent; already-percent values stay as-is.
+      const inferredVat = vat > 30 && net > 0
+        ? Math.round((vat / net) * 100)
+        : vat > 0 && vat <= 30
+          ? Math.round(vat)
+          : 21;
       return {
         id: index + 1,
-        kind: "material" as const,
+        kind: kindIndex >= 0 ? inferKind(row[kindIndex]) : "material" as const,
         name,
         unit: String(unitIndex >= 0 ? row[unitIndex] ?? "buc" : "buc").toLowerCase(),
         quantity,
         unitPrice,
         vatRate: [0, 11, 19, 21].includes(inferredVat) ? inferredVat : 21,
       };
-    }).filter((item) => item.name && item.quantity > 0 && item.unitPrice > 0);
+    }).filter((item) => {
+      const key = normalized(item.name);
+      if (!item.name || item.quantity <= 0 || item.unitPrice <= 0) return false;
+      if (key.includes("contravaloare") || key.includes("totalgeneral") || key.includes("discount")) return false;
+      if (key.includes("materialecosturi") || key.includes("serviciidin") || key.includes("tvapozit")) return false;
+      if (key.includes("manopera") && key.length < 20) return false;
+      return true;
+    });
   } else {
     // Oferte furnizor fără antet: cod, denumire, disponibilitate, preț unitar, cantitate, total.
     items = rows.map((row, index) => ({
@@ -188,7 +257,11 @@ export function parseLegacyOffer(rows: unknown[][]): ImportedOffer {
     })).filter((item) => item.name && item.quantity > 0 && item.unitPrice > 0);
   }
 
-  if (!items.length) throw new Error("Nu am putut identifica pozițiile ofertei.");
+  if (!items.length) {
+    throw new Error(
+      "Nu am putut identifica pozițiile ofertei. Folosește un .xlsx cu coloane: Descriere/Denumire, Cantitate, Preț unitar.",
+    );
+  }
   if (/prima pozitie e in metri/i.test(joined) && items[0]) items[0].unit = "m";
   const noteLines = texts.filter((value) =>
     /garantie|valabil|oferta (?:nu )?include|mentiune|preturile sunt|curs euro/i.test(value),

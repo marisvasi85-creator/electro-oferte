@@ -600,8 +600,15 @@ export default function Home() {
     }
     setSaveMessage("Se citește oferta Excel…");
     try {
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith(".xls") && !lowerName.endsWith(".xlsx")) {
+        throw new Error("Fișierele .xls (Excel 97–2003) nu sunt suportate. Deschide fișierul în Excel și salvează-l ca .xlsx, apoi reîncearcă.");
+      }
       const readXlsxFile = (await import("read-excel-file/browser")).default;
       const rows = firstPopulatedSheet(await readXlsxFile(file));
+      if (!rows.length) {
+        throw new Error("Nu am găsit date în Excel. Verifică că fișierul .xlsx are un sheet cu poziții.");
+      }
       const imported = parseLegacyOffer(rows);
       setCurrentOfferId(null);
       setCurrentNumber(nextOfferNumber(savedOffers));
@@ -622,7 +629,12 @@ export default function Home() {
       setView("editor");
       setSaveMessage(`Previzualizare importată din ${file.name} · verifică cele ${imported.items.length} poziții și salvează oferta`);
     } catch (error) {
-      setSaveMessage(`Importul ofertei a eșuat: ${(error as Error).message}`);
+      const message = (error as Error).message || "eroare necunoscută";
+      if (/XLS_FILE_NOT_SUPPORTED|legacy binary|\.xls/i.test(message)) {
+        setSaveMessage("Importul ofertei a eșuat: fișierul .xls vechi nu este suportat. Salvează-l ca .xlsx în Excel și reîncearcă.");
+      } else {
+        setSaveMessage(`Importul ofertei a eșuat: ${message}`);
+      }
     } finally {
       if (legacyOfferInput.current) legacyOfferInput.current.value = "";
     }
@@ -1064,8 +1076,8 @@ export default function Home() {
             <header className="topbar">
               <div><span className="eyebrow">FRIZEO OFERTE</span><h1>Oferte</h1><p>{savedOffers.length} salvate și sincronizate</p></div>
               <div className="top-actions">
-                <input ref={legacyOfferInput} hidden type="file" accept=".xlsx,.xls" onChange={(event) => event.target.files?.[0] && importLegacyOffer(event.target.files[0])} />
-                <button className="secondary" onClick={() => legacyOfferInput.current?.click()}>Importă ofertă veche</button>
+                <input ref={legacyOfferInput} hidden type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => event.target.files?.[0] && importLegacyOffer(event.target.files[0])} />
+                <button className="secondary" onClick={() => legacyOfferInput.current?.click()} title="Importă o ofertă .xlsx (Excel 2007+)">Importă ofertă veche (.xlsx)</button>
                 <button className="primary" onClick={newOffer}>＋ Ofertă nouă</button>
               </div>
             </header>
