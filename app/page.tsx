@@ -13,7 +13,7 @@ import { AuthScreen } from "./auth-screen";
 import { CompanyOnboarding } from "./company-onboarding";
 import { CompanySwitcher } from "./company-switcher";
 import { CatalogManager, type ManagedCatalogItem } from "./catalog-manager";
-import { firstPopulatedSheet, parseLegacyOffer } from "./excel-import";
+import { parseLegacyOfferWorkbook } from "./excel-import";
 import { supabase } from "../lib/supabase";
 import {
   addRemoteCatalogItems,
@@ -281,6 +281,8 @@ export default function Home() {
   const [saveMessage, setSaveMessage] = useState("Ciornă locală");
   const [pdfBusy, setPdfBusy] = useState(false);
   const [excelBusy, setExcelBusy] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importNotice, setImportNotice] = useState<{ tone: "info" | "error" | "ok"; text: string } | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [baseCatalog, setBaseCatalog] = useState<CatalogItem[]>([]);
@@ -598,18 +600,20 @@ export default function Home() {
       if (legacyOfferInput.current) legacyOfferInput.current.value = "";
       return;
     }
+    setImportBusy(true);
+    setImportNotice({ tone: "info", text: `Se citește „${file.name}”…` });
     setSaveMessage("Se citește oferta Excel…");
     try {
       const lowerName = file.name.toLowerCase();
       if (lowerName.endsWith(".xls") && !lowerName.endsWith(".xlsx")) {
         throw new Error("Fișierele .xls (Excel 97–2003) nu sunt suportate. Deschide fișierul în Excel și salvează-l ca .xlsx, apoi reîncearcă.");
       }
-      const readXlsxFile = (await import("read-excel-file/browser")).default;
-      const rows = firstPopulatedSheet(await readXlsxFile(file));
-      if (!rows.length) {
-        throw new Error("Nu am găsit date în Excel. Verifică că fișierul .xlsx are un sheet cu poziții.");
+      if (!lowerName.endsWith(".xlsx") && !/spreadsheetml|officedocument/i.test(file.type || "")) {
+        throw new Error("Selectează un fișier .xlsx (Excel 2007+). Fișierele .xls, .csv sau PDF nu pot fi importate aici.");
       }
-      const imported = parseLegacyOffer(rows);
+      const readXlsxFile = (await import("read-excel-file/browser")).default;
+      const workbook = await readXlsxFile(file);
+      const imported = parseLegacyOfferWorkbook(workbook);
       setCurrentOfferId(null);
       setCurrentNumber(nextOfferNumber(savedOffers));
       setClient(imported.client);
@@ -627,15 +631,18 @@ export default function Home() {
       setNotes(imported.notes || `Importată din ${file.name}. Verifică valorile înainte de salvare.`);
       setSavedSignature("");
       setView("editor");
-      setSaveMessage(`Previzualizare importată din ${file.name} · verifică cele ${imported.items.length} poziții și salvează oferta`);
+      const okMessage = `Previzualizare importată din ${file.name} · verifică cele ${imported.items.length} poziții și salvează oferta`;
+      setImportNotice({ tone: "ok", text: okMessage });
+      setSaveMessage(okMessage);
     } catch (error) {
       const message = (error as Error).message || "eroare necunoscută";
-      if (/XLS_FILE_NOT_SUPPORTED|legacy binary|\.xls/i.test(message)) {
-        setSaveMessage("Importul ofertei a eșuat: fișierul .xls vechi nu este suportat. Salvează-l ca .xlsx în Excel și reîncearcă.");
-      } else {
-        setSaveMessage(`Importul ofertei a eșuat: ${message}`);
-      }
+      const failMessage = /XLS_FILE_NOT_SUPPORTED|legacy binary|\.xls/i.test(message)
+        ? "Importul ofertei a eșuat: fișierul .xls vechi nu este suportat. Salvează-l ca .xlsx în Excel și reîncearcă."
+        : `Importul ofertei a eșuat: ${message}`;
+      setImportNotice({ tone: "error", text: failMessage });
+      setSaveMessage(failMessage);
     } finally {
+      setImportBusy(false);
       if (legacyOfferInput.current) legacyOfferInput.current.value = "";
     }
   }
@@ -1077,12 +1084,21 @@ export default function Home() {
               <div><span className="eyebrow">FRIZEO OFERTE</span><h1>Oferte</h1><p>{savedOffers.length} salvate și sincronizate</p></div>
               <div className="top-actions">
                 <input ref={legacyOfferInput} hidden type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => event.target.files?.[0] && importLegacyOffer(event.target.files[0])} />
-                <button className="secondary" onClick={() => legacyOfferInput.current?.click()} title="Importă o ofertă .xlsx (Excel 2007+)">Importă ofertă veche (.xlsx)</button>
+                <button className="secondary" onClick={() => legacyOfferInput.current?.click()} title="Importă o ofertă .xlsx (Excel 2007+)" disabled={importBusy}>
+                  {importBusy ? "Se importă…" : "Importă ofertă veche (.xlsx)"}
+                </button>
                 <button className="primary" onClick={newOffer}>＋ Ofertă nouă</button>
               </div>
             </header>
             <section className="offers-page">
               <div className="local-notice"><strong>Versiune beta sincronizată</strong><span>Ofertele sunt salvate în proiectul Supabase Oferte și sunt disponibile după autentificare.</span></div>
+              {importNotice ? (
+                <div className={`import-notice ${importNotice.tone}`} role="status">
+                  <strong>{importNotice.tone === "error" ? "Import eșuat" : importNotice.tone === "ok" ? "Import reușit" : "Import"}</strong>
+                  <span>{importNotice.text}</span>
+                  <button type="button" className="import-notice-dismiss" onClick={() => setImportNotice(null)} aria-label="Închide">×</button>
+                </div>
+              ) : null}
               <div className="offers-toolbar">
                 <label><span>Caută ofertă</span><input value={offerSearch} onChange={(event) => setOfferSearch(event.target.value)} placeholder="Număr, client, lucrare sau status…" /></label>
                 <strong>{filteredOffers.length} rezultate</strong>

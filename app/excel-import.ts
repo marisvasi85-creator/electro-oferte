@@ -30,7 +30,13 @@ function normalized(value: unknown) {
 
 function asNumber(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  const parsed = Number(String(value ?? "").replace(/\s/g, "").replace(",", "."));
+  let text = String(value ?? "").trim().replace(/\s/g, "").replace(/lei|ron|eur|€/gi, "");
+  if (!text) return 0;
+  // European formats: 1.234,56 or 1,234.56
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(text)) text = text.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(text)) text = text.replace(/,/g, "");
+  else text = text.replace(",", ".");
+  const parsed = Number(text);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
@@ -52,19 +58,94 @@ function today() {
 }
 
 export function firstPopulatedSheet(input: unknown): unknown[][] {
-  if (!Array.isArray(input)) return [];
-  if (input.every((row) => Array.isArray(row))) return input as unknown[][];
-  const sheets = input as Array<{ data?: unknown[][] }>;
-  return sheets.find((sheet) => Array.isArray(sheet.data) && sheet.data.length)?.data ?? [];
+  const sheets = listSheetMatrices(input);
+  if (!sheets.length) return [];
+  return pickBestOfferSheet(sheets);
+}
+
+/** Normalize read-excel-file output (rows matrix OR sheets array) into sheet matrices. */
+export function listSheetMatrices(input: unknown): unknown[][][] {
+  if (!Array.isArray(input) || input.length === 0) return [];
+  if (input.every((row) => Array.isArray(row))) return [input as unknown[][]];
+  return (input as Array<{ data?: unknown[][] }>)
+    .map((sheet) => sheet.data)
+    .filter((data): data is unknown[][] => Array.isArray(data) && data.length > 0);
+}
+
+const OFFER_NAME_HEADERS = [
+  "serviciimateriale",
+  "denumire",
+  "descriere",
+  "articol",
+  "material",
+  "produs",
+  "lucrare",
+  "pozitie",
+  "name",
+];
+const OFFER_QTY_HEADERS = ["cantitate", "cant", "qty", "quantity", "nrbuc"];
+const OFFER_PRICE_HEADERS = [
+  "pretbuc",
+  "pretunitarfaratva",
+  "pretunitarfara",
+  "pretunitar",
+  "unitprice",
+  "price",
+];
+const OFFER_NET_HEADERS = ["pretfaratva", "totalfaratva", "valoarefaratva", "valoare"];
+const OFFER_TOTAL_HEADERS = ["totalcutva", "total", "valoaretva"];
+
+function isUnitPriceHeader(cell: string) {
+  return (
+    cell.includes("unitar")
+    || cell.includes("buc")
+    || cell === "pret"
+    || cell === "price"
+    || cell === "unitprice"
+  ) && !cell.includes("total") && !/^pretfaratva$/.test(cell);
+}
+
+function scoreOfferSheet(rows: unknown[][]): number {
+  const headerIndex = findHeader(rows.slice(0, 100), [OFFER_NAME_HEADERS, OFFER_QTY_HEADERS]);
+  if (headerIndex < 0) {
+    // Prefer denser sheets when no header is found.
+    return rows.reduce((sum, row) => sum + row.filter((cell) => String(cell ?? "").trim()).length, 0) * 0.01;
+  }
+  const headers = rows[headerIndex];
+  let score = 1000 + (rows.length - headerIndex);
+  if (unitPriceColumn(headers) >= 0) score += 250;
+  else if (column(headers, OFFER_NET_HEADERS) >= 0 || column(headers, OFFER_TOTAL_HEADERS) >= 0) score += 120;
+  if (column(headers, ["um", "unitate", "unit"]) >= 0) score += 50;
+  return score;
+}
+
+export function pickBestOfferSheet(sheets: unknown[][][]): unknown[][] {
+  if (!sheets.length) return [];
+  return [...sheets].sort((a, b) => scoreOfferSheet(b) - scoreOfferSheet(a))[0] ?? [];
 }
 
 function headerMatches(cell: string, candidate: string) {
   if (!cell || !candidate) return false;
   if (cell === candidate) return true;
   // Accept longer Excel headers like "pretunitarfaratva" for "pretunitar".
-  if (candidate.length >= 4 && (cell.startsWith(candidate) || cell.includes(candidate))) return true;
-  if (cell.length >= 4 && candidate.includes(cell)) return true;
+  // Do NOT reverse-match short cells into longer candidates ("pretfaratva" ≠ "pretunitarfaratva").
+  if (candidate.length >= 4 && cell.startsWith(candidate)) return true;
+  if (candidate.length >= 6 && cell.includes(candidate)) return true;
   return false;
+}
+
+function unitPriceColumn(headers: unknown[]) {
+  const cells = headers.map(normalized);
+  const exactPreferred = cells.findIndex((cell) =>
+    ["pretbuc", "pretunitarfaratva", "pretunitarfara", "pretunitar", "unitprice"].includes(cell),
+  );
+  if (exactPreferred >= 0) return exactPreferred;
+  const fuzzyPreferred = cells.findIndex((cell) =>
+    OFFER_PRICE_HEADERS.some((name) => headerMatches(cell, name)) && isUnitPriceHeader(cell),
+  );
+  if (fuzzyPreferred >= 0) return fuzzyPreferred;
+  // Last resort: bare "pret" / "price" that is not a total column.
+  return cells.findIndex((cell) => (cell === "pret" || cell === "price") && !cell.includes("total"));
 }
 
 function findHeader(rows: unknown[][], requiredGroups: string[][]) {
@@ -192,34 +273,28 @@ export function parseLegacyOffer(rows: unknown[][]): ImportedOffer {
   const laborLabelIndex = laborRow?.findIndex((cell) => normalized(cell).includes("contravaloaremanopera")) ?? -1;
   const labor = laborRow ? asNumber(laborRow.slice(laborLabelIndex + 1).find((cell) => asNumber(cell) > 0)) : 0;
 
-  const headerIndex = findHeader(rows.slice(0, 80), [
-    ["serviciimateriale", "denumire", "descriere", "articol", "material"],
-    ["cantitate", "cant", "qty"],
-  ]);
+  const headerIndex = findHeader(rows.slice(0, 100), [OFFER_NAME_HEADERS, OFFER_QTY_HEADERS]);
   let items: ImportedOfferItem[] = [];
 
   if (headerIndex >= 0) {
     const headers = rows[headerIndex];
-    const nameIndex = column(headers, ["serviciimateriale", "denumire", "descriere", "articol", "material"]);
+    const nameIndex = column(headers, OFFER_NAME_HEADERS);
     const kindIndex = column(headers, ["tip", "kind", "tiparticol"]);
     const unitIndex = column(headers, ["um", "unitate", "unit"]);
-    const quantityIndex = column(headers, ["cantitate", "cant", "qty"]);
-    const priceIndex = column(headers, [
-      "pretbuc",
-      "pretunitarfaratva",
-      "pretunitar",
-      "unitprice",
-      "price",
-      "pret",
-    ]);
-    const netIndex = column(headers, ["pretfaratva", "totalfaratva"]);
+    const quantityIndex = column(headers, OFFER_QTY_HEADERS);
+    const priceIndex = unitPriceColumn(headers);
+    const netIndex = column(headers, OFFER_NET_HEADERS);
+    const totalIndex = column(headers, OFFER_TOTAL_HEADERS);
     const vatIndex = column(headers, ["tva", "vatrate", "vat"]);
 
     items = rows.slice(headerIndex + 1).map((row, index) => {
       const name = String(row[nameIndex] ?? "").trim();
       const quantity = asNumber(row[quantityIndex]);
-      const unitPrice = asNumber(priceIndex >= 0 ? row[priceIndex] : 0);
+      let unitPrice = asNumber(priceIndex >= 0 ? row[priceIndex] : 0);
       const net = asNumber(netIndex >= 0 ? row[netIndex] : 0);
+      const total = asNumber(totalIndex >= 0 ? row[totalIndex] : 0);
+      if (unitPrice <= 0 && quantity > 0 && net > 0) unitPrice = net / quantity;
+      if (unitPrice <= 0 && quantity > 0 && total > 0) unitPrice = total / quantity;
       const vat = asNumber(vatIndex >= 0 ? row[vatIndex] : 0);
       // Absolute VAT amount → percent; already-percent values stay as-is.
       const inferredVat = vat > 30 && net > 0
@@ -231,9 +306,9 @@ export function parseLegacyOffer(rows: unknown[][]): ImportedOffer {
         id: index + 1,
         kind: kindIndex >= 0 ? inferKind(row[kindIndex]) : "material" as const,
         name,
-        unit: String(unitIndex >= 0 ? row[unitIndex] ?? "buc" : "buc").toLowerCase(),
+        unit: String(unitIndex >= 0 ? row[unitIndex] ?? "buc" : "buc").toLowerCase() || "buc",
         quantity,
-        unitPrice,
+        unitPrice: Number(unitPrice.toFixed(4)),
         vatRate: [0, 11, 19, 21].includes(inferredVat) ? inferredVat : 21,
       };
     }).filter((item) => {
@@ -241,7 +316,7 @@ export function parseLegacyOffer(rows: unknown[][]): ImportedOffer {
       if (!item.name || item.quantity <= 0 || item.unitPrice <= 0) return false;
       if (key.includes("contravaloare") || key.includes("totalgeneral") || key.includes("discount")) return false;
       if (key.includes("materialecosturi") || key.includes("serviciidin") || key.includes("tvapozit")) return false;
-      if (key.includes("manopera") && key.length < 20) return false;
+      if (key === "manopera" || key === "total" || key === "subtotal") return false;
       return true;
     });
   } else {
@@ -277,4 +352,23 @@ export function parseLegacyOffer(rows: unknown[][]): ImportedOffer {
     discount: discountMatch ? asNumber(discountMatch[1]) : 0,
     notes: Array.from(new Set(noteLines)).join("\n"),
   };
+}
+
+/** Pick the best sheet from a workbook (or matrix) and parse it as an offer. */
+export function parseLegacyOfferWorkbook(input: unknown): ImportedOffer {
+  const sheets = listSheetMatrices(input);
+  if (!sheets.length) {
+    throw new Error("Nu am găsit date în Excel. Verifică că fișierul .xlsx are un sheet cu poziții.");
+  }
+
+  const ranked = [...sheets].sort((a, b) => scoreOfferSheet(b) - scoreOfferSheet(a));
+  let lastError: Error | null = null;
+  for (const sheet of ranked) {
+    try {
+      return parseLegacyOffer(sheet);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  throw lastError ?? new Error("Nu am putut identifica pozițiile ofertei în niciun sheet.");
 }

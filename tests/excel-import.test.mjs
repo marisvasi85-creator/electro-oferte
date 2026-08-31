@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseLegacyOffer, parseCatalogRows } from "../app/excel-import.ts";
+import {
+  parseLegacyOffer,
+  parseLegacyOfferWorkbook,
+  parseCatalogRows,
+  firstPopulatedSheet,
+} from "../app/excel-import.ts";
 
 test("imports Frizeo-exported offer xlsx rows", () => {
   const rows = [
@@ -41,10 +46,61 @@ test("imports classic Romanian offer headers", () => {
   assert.equal(imported.client, "SC Client SRL");
   assert.equal(imported.items.length, 2);
   assert.equal(imported.labor, 500);
+  assert.equal(imported.items[0].unitPrice, 3.2);
+});
+
+test("infers unit price from net total when unit price column is missing", () => {
+  const rows = [
+    ["OFERTĂ Test"],
+    ["Beneficiar", "Client X"],
+    ["Denumire", "UM", "Cantitate", "Preț fără TVA", "TVA"],
+    ["Cablu", "m", 10, 45, 9.45],
+    ["Priză", "buc", 2, 50, 10.5],
+  ];
+  const imported = parseLegacyOffer(rows);
+  assert.equal(imported.items.length, 2);
+  assert.equal(imported.items[0].unitPrice, 4.5);
+  assert.equal(imported.items[1].unitPrice, 25);
+});
+
+test("picks the offer sheet when cover sheet comes first", () => {
+  const workbook = [
+    {
+      sheet: "Copertă",
+      data: [
+        ["OFERTĂ SPECIALĂ"],
+        ["Beneficiar", "Doar pe copertă"],
+        ["Fără poziții aici"],
+      ],
+    },
+    {
+      sheet: "Poziții",
+      data: [
+        ["#", "Descriere", "UM", "Cantitate", "Preț unitar", "Total"],
+        [1, "Întrerupător", "buc", 4, 35, 140],
+        [2, "Cablu", "m", 20, 3, 60],
+      ],
+    },
+  ];
+  const imported = parseLegacyOfferWorkbook(workbook);
+  assert.equal(imported.items.length, 2);
+  assert.equal(imported.items[0].name, "Întrerupător");
+  assert.equal(firstPopulatedSheet(workbook)[0][1], "Descriere");
+});
+
+test("parses European number formats in prices", () => {
+  const rows = [
+    ["Descriere", "Cantitate", "Preț unitar"],
+    ["Articol", "2", "1.250,50"],
+  ];
+  const imported = parseLegacyOffer(rows);
+  assert.equal(imported.items.length, 1);
+  assert.equal(imported.items[0].unitPrice, 1250.5);
 });
 
 test("rejects empty sheets with a clear error", () => {
   assert.throws(() => parseLegacyOffer([]), /gol|Nu am putut/i);
+  assert.throws(() => parseLegacyOfferWorkbook([]), /Nu am găsit date/i);
 });
 
 test("catalog import accepts pret unitar fara TVA headers", () => {
